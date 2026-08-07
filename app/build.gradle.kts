@@ -12,7 +12,7 @@ android {
     buildToolsVersion = "36.1.0"
 
     defaultConfig {
-        applicationId = "info.muge.appshare"
+        applicationId = "info.muge.appshare.selfbuild"
 
         minSdk{
             version = release(24)
