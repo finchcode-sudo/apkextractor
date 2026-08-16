@@ -3,6 +3,8 @@ package info.muge.appshare.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
@@ -731,6 +733,26 @@ private fun AboutDialog(
                 Text(
                     text = "• APK 导出与分享\n• 应用信息查看\n• 签名分析\n• 统计功能",
                     style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                // GitHub 源码链接
+                val githubUrl = "https://github.com/finchcode-sudo/apkextractor"
+                Text(
+                    text = "源码地址：$githubUrl",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                "无法打开链接".toast()
+                            }
+                        }
+                        .padding(vertical = 4.dp)
                 )
             }
         },
