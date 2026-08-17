@@ -10,9 +10,11 @@ import android.os.Bundle
 import android.text.TextUtils
 import info.muge.appshare.DisplayItem
 import info.muge.appshare.R
+import info.muge.appshare.Constants
 import info.muge.appshare.utils.EnvironmentUtil
 import info.muge.appshare.utils.FileUtil
 import info.muge.appshare.utils.PinyinUtil
+import info.muge.appshare.utils.SPUtil
 import java.io.File
 
 /**
@@ -276,24 +278,24 @@ class AppItem : Comparable<AppItem>, DisplayItem {
      */
     fun getFullPackageInfo(context: Context): PackageInfo {
         cachedFullPackageInfo?.let { return it }
-        val settings = info.muge.appshare.utils.SPUtil.getGlobalSharedPreferences(context)
+        val settings = SPUtil.getGlobalSharedPreferences(context)
         var flag = 0
-        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_PERMISSIONS, info.muge.appshare.Constants.PREFERENCE_LOAD_PERMISSIONS_DEFAULT)) {
+        if (settings.getBoolean(Constants.PREFERENCE_LOAD_PERMISSIONS, Constants.PREFERENCE_LOAD_PERMISSIONS_DEFAULT)) {
             flag = flag or PackageManager.GET_PERMISSIONS
         }
-        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_ACTIVITIES, info.muge.appshare.Constants.PREFERENCE_LOAD_ACTIVITIES_DEFAULT)) {
+        if (settings.getBoolean(Constants.PREFERENCE_LOAD_ACTIVITIES, Constants.PREFERENCE_LOAD_ACTIVITIES_DEFAULT)) {
             flag = flag or PackageManager.GET_ACTIVITIES
         }
-        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_RECEIVERS, info.muge.appshare.Constants.PREFERENCE_LOAD_RECEIVERS_DEFAULT)) {
+        if (settings.getBoolean(Constants.PREFERENCE_LOAD_RECEIVERS, Constants.PREFERENCE_LOAD_RECEIVERS_DEFAULT)) {
             flag = flag or PackageManager.GET_RECEIVERS
         }
-        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_APK_SIGNATURE, info.muge.appshare.Constants.PREFERENCE_LOAD_APK_SIGNATURE_DEFAULT)) {
+        if (settings.getBoolean(Constants.PREFERENCE_LOAD_APK_SIGNATURE, Constants.PREFERENCE_LOAD_APK_SIGNATURE_DEFAULT)) {
             flag = flag or PackageManager.GET_SIGNATURES
         }
-        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_SERVICES, info.muge.appshare.Constants.PREFERENCE_LOAD_SERVICES_DEFAULT)) {
+        if (settings.getBoolean(Constants.PREFERENCE_LOAD_SERVICES, Constants.PREFERENCE_LOAD_SERVICES_DEFAULT)) {
             flag = flag or PackageManager.GET_SERVICES
         }
-        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_PROVIDERS, info.muge.appshare.Constants.PREFERENCE_LOAD_PROVIDERS_DEFAULT)) {
+        if (settings.getBoolean(Constants.PREFERENCE_LOAD_PROVIDERS, Constants.PREFERENCE_LOAD_PROVIDERS_DEFAULT)) {
             flag = flag or PackageManager.GET_PROVIDERS
         }
 
@@ -450,4 +452,3 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         }
     }
 }
-
