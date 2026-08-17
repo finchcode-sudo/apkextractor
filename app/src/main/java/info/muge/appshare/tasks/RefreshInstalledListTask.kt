@@ -2,7 +2,6 @@ package info.muge.appshare.tasks
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import info.muge.appshare.Constants
 import info.muge.appshare.Global
 import info.muge.appshare.items.AppItem
@@ -87,30 +86,15 @@ class RefreshInstalledListTask(
 
         val manager = context.applicationContext.packageManager
 
-        var flag = 0
-        if (settings.getBoolean(Constants.PREFERENCE_LOAD_PERMISSIONS, Constants.PREFERENCE_LOAD_PERMISSIONS_DEFAULT)) {
-            flag = flag or PackageManager.GET_PERMISSIONS
-        }
-        if (settings.getBoolean(Constants.PREFERENCE_LOAD_ACTIVITIES, Constants.PREFERENCE_LOAD_ACTIVITIES_DEFAULT)) {
-            flag = flag or PackageManager.GET_ACTIVITIES
-        }
-        if (settings.getBoolean(Constants.PREFERENCE_LOAD_RECEIVERS, Constants.PREFERENCE_LOAD_RECEIVERS_DEFAULT)) {
-            flag = flag or PackageManager.GET_RECEIVERS
-        }
-        if (settings.getBoolean(Constants.PREFERENCE_LOAD_APK_SIGNATURE, Constants.PREFERENCE_LOAD_APK_SIGNATURE_DEFAULT)) {
-            flag = flag or PackageManager.GET_SIGNATURES
-        }
-        if (settings.getBoolean(Constants.PREFERENCE_LOAD_SERVICES, Constants.PREFERENCE_LOAD_SERVICES_DEFAULT)) {
-            flag = flag or PackageManager.GET_SERVICES
-        }
-        if (settings.getBoolean(Constants.PREFERENCE_LOAD_PROVIDERS, Constants.PREFERENCE_LOAD_PROVIDERS_DEFAULT)) {
-            flag = flag or PackageManager.GET_PROVIDERS
-        }
-
+        // 注意：不再为列表扫描请求 GET_PERMISSIONS / GET_ACTIVITIES / GET_RECEIVERS /
+        // GET_SIGNATURES / GET_SERVICES / GET_PROVIDERS 这些重量级 flag。
+        // 它们需要系统逐个应用解析 manifest（部分还要校验签名），对几百个应用一起做非常慢，
+        // 而列表页其实完全用不到这些数据——只有"应用详情"页会用到。
+        // 详情页改为按需查询单个应用的完整 PackageInfo，见 AppItem.getFullPackageInfo()。
         val list = ArrayList<android.content.pm.PackageInfo>()
         synchronized(RefreshInstalledListTask::class.java) {
             list.clear()
-            list.addAll(manager.getInstalledPackages(flag))
+            list.addAll(manager.getInstalledPackages(0))
         }
 
         // 非阻塞 fire-and-forget，匹配原 Global.handler.post 语义

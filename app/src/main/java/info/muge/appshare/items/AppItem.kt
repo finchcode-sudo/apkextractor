@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.text.TextUtils
@@ -33,9 +34,14 @@ class AppItem : Comparable<AppItem>, DisplayItem {
     private val title: String
 
     /**
-     * 应用图标
+     * 应用图标（懒加载：真正需要展示/保存时才通过 PackageManager 取，并缓存结果）。
+     * 列表页请优先使用 AppIconModel(packageName) 配合 Coil 加载——只加载屏幕上可见的行，
+     * 而不是像本字段这样，一旦访问就会同步阻塞获取。
      */
-    private val drawable: Drawable
+    @Transient
+    private var cachedDrawable: Drawable? = null
+    @Transient
+    private var iconContext: Context? = null
 
     /**
      * 应用大小
@@ -75,7 +81,7 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         this.fileItem = FileItem(File(info.applicationInfo!!.sourceDir))
         this.title = packageManager.getApplicationLabel(info.applicationInfo!!).toString()
         this.size = FileUtil.getFileOrFolderSize(File(info.applicationInfo!!.sourceDir))
-        this.drawable = packageManager.getApplicationIcon(info.applicationInfo!!)
+        this.iconContext = context.applicationContext
         
         var install_source = context.resources.getString(R.string.word_unknown)
         try {
@@ -118,7 +124,8 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         this.title = wrapper.title
         this.size = wrapper.size
         this.info = wrapper.info
-        this.drawable = wrapper.drawable
+        this.cachedDrawable = wrapper.cachedDrawable
+        this.iconContext = wrapper.iconContext
         this.installSource = wrapper.installSource
         this.launchingClass = wrapper.launchingClass
         this.exportData = flag_data
@@ -136,16 +143,11 @@ class AppItem : Comparable<AppItem>, DisplayItem {
      * @param cache 上次持久化的轻量缓存条目
      */
     constructor(context: Context, info: PackageInfo, cache: AppItemCacheEntry) {
-        val packageManager = context.applicationContext.packageManager
         this.info = info
         this.fileItem = FileItem(File(info.applicationInfo!!.sourceDir))
         this.title = cache.title
         this.size = cache.size
-        this.drawable = try {
-            packageManager.getApplicationIcon(info.applicationInfo!!)
-        } catch (e: Exception) {
-            packageManager.defaultActivityIcon
-        }
+        this.iconContext = context.applicationContext
         this.installSource = cache.installSource
         this.launchingClass = cache.launchingClass
         this.staticReceiversContext = context.applicationContext
@@ -189,7 +191,8 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         }
         
         this.title = appName ?: ""
-        this.drawable = appIcon
+        this.cachedDrawable = appIcon
+        this.iconContext = context.applicationContext
         this.size = File(filePath).length()
         this.installSource = "External File"
         this.launchingClass = ""
@@ -197,7 +200,7 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         this.splitSourceDirs = null
     }
 
-    override fun getIconDrawable(): Drawable = drawable
+    override fun getIconDrawable(): Drawable = getIcon()
 
     override fun getTitle(): String = "$title(${getVersionName()})"
 
@@ -206,9 +209,26 @@ class AppItem : Comparable<AppItem>, DisplayItem {
     override fun isRedMarked(): Boolean = (info.applicationInfo!!.flags and ApplicationInfo.FLAG_SYSTEM) > 0
 
     /**
-     * 获取应用图标
+     * 获取应用图标（懒加载：首次调用时才通过 PackageManager 同步获取，结果会缓存）。
+     * 注意：在列表/网格等需要渲染大量条目的场景，请不要直接调用本方法，
+     * 而是用 AppIconModel(getPackageName()) 交给 Coil 异步、按需（仅可见项）加载。
      */
-    fun getIcon(): Drawable = drawable
+    fun getIcon(): Drawable {
+        cachedDrawable?.let { return it }
+        val ctx = iconContext
+        val appInfo = info.applicationInfo
+        val icon = if (ctx != null && appInfo != null) {
+            try {
+                ctx.packageManager.getApplicationIcon(appInfo)
+            } catch (e: Exception) {
+                ctx.packageManager.defaultActivityIcon
+            }
+        } else {
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+        }
+        cachedDrawable = icon
+        return icon
+    }
 
     /**
      * 获取应用名称
@@ -241,9 +261,50 @@ class AppItem : Comparable<AppItem>, DisplayItem {
     fun getVersionCode(): Int = info.versionCode
 
     /**
-     * 获取本应用Item对应的PackageInfo实例
+     * 获取本应用Item对应的PackageInfo实例（列表扫描阶段用的轻量版本，不含权限/组件/签名等信息）
      */
     fun getPackageInfo(): PackageInfo = info
+
+    // 懒加载：详情页需要的"完整"PackageInfo（含权限、四大组件、签名等），
+    // 仅在真正打开详情页时才按需查询单个应用，避免扫描全部应用时都去查这些重量级数据。
+    @Transient
+    private var cachedFullPackageInfo: PackageInfo? = null
+
+    /**
+     * 获取包含权限/四大组件/签名信息的完整 PackageInfo，仅供应用详情页使用。
+     * 首次调用时才真正查询（单个应用查询很快），结果会缓存。
+     */
+    fun getFullPackageInfo(context: Context): PackageInfo {
+        cachedFullPackageInfo?.let { return it }
+        val settings = info.muge.appshare.utils.SPUtil.getGlobalSharedPreferences(context)
+        var flag = 0
+        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_PERMISSIONS, info.muge.appshare.Constants.PREFERENCE_LOAD_PERMISSIONS_DEFAULT)) {
+            flag = flag or PackageManager.GET_PERMISSIONS
+        }
+        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_ACTIVITIES, info.muge.appshare.Constants.PREFERENCE_LOAD_ACTIVITIES_DEFAULT)) {
+            flag = flag or PackageManager.GET_ACTIVITIES
+        }
+        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_RECEIVERS, info.muge.appshare.Constants.PREFERENCE_LOAD_RECEIVERS_DEFAULT)) {
+            flag = flag or PackageManager.GET_RECEIVERS
+        }
+        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_APK_SIGNATURE, info.muge.appshare.Constants.PREFERENCE_LOAD_APK_SIGNATURE_DEFAULT)) {
+            flag = flag or PackageManager.GET_SIGNATURES
+        }
+        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_SERVICES, info.muge.appshare.Constants.PREFERENCE_LOAD_SERVICES_DEFAULT)) {
+            flag = flag or PackageManager.GET_SERVICES
+        }
+        if (settings.getBoolean(info.muge.appshare.Constants.PREFERENCE_LOAD_PROVIDERS, info.muge.appshare.Constants.PREFERENCE_LOAD_PROVIDERS_DEFAULT)) {
+            flag = flag or PackageManager.GET_PROVIDERS
+        }
+
+        val full = try {
+            context.applicationContext.packageManager.getPackageInfo(getPackageName(), flag)
+        } catch (e: Exception) {
+            info
+        }
+        cachedFullPackageInfo = full
+        return full
+    }
 
     fun getInstallSource(): String = installSource
 

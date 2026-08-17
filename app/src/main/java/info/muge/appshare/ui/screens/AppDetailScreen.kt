@@ -91,6 +91,7 @@ import info.muge.appshare.ui.screens.appdetail.SignatureContent
 import info.muge.appshare.ui.screens.appdetail.SoLibContent
 import info.muge.appshare.ui.theme.AppDimens
 import info.muge.appshare.utils.EnvironmentUtil
+import info.muge.appshare.utils.AppIconModel
 import info.muge.appshare.utils.findActivity
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -505,7 +506,7 @@ private fun AppDetailHeader(
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(appItem.getIcon())
+                    .data(AppIconModel(appItem.getPackageName()))
                     .crossfade(true)
                     .build(),
                 contentDescription = null,

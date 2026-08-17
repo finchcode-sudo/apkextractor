@@ -66,7 +66,7 @@ fun ComponentListContent(
         components.clear()
 
         val items = withContext(Dispatchers.IO) {
-            val packageInfo = appItem.getPackageInfo()
+            val packageInfo = appItem.getFullPackageInfo(context)
             val result = mutableListOf<ComponentItem>()
 
             when (componentType) {

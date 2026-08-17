@@ -63,7 +63,7 @@ fun SignatureContent(appItem: AppItem) {
     LaunchedEffect(appItem) {
         try {
             val result = withContext(Dispatchers.IO) {
-                val packageInfo = appItem.getPackageInfo()
+                val packageInfo = appItem.getFullPackageInfo(context)
                 val sourceDir = packageInfo.applicationInfo?.sourceDir ?: ""
 
                 // 使用增强的签名工具获取完整信息

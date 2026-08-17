@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import info.muge.appshare.utils.AppIconModel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -301,7 +302,7 @@ internal fun StatisticsAppListItem(
     ) {
         // 图标
         androidx.compose.foundation.Image(
-            painter = coil3.compose.rememberAsyncImagePainter(app.getIcon()),
+            painter = coil3.compose.rememberAsyncImagePainter(AppIconModel(app.getPackageName())),
             contentDescription = null,
             modifier = Modifier
                 .size(44.dp)

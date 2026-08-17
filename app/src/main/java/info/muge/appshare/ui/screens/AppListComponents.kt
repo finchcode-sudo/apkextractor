@@ -59,6 +59,7 @@ import info.muge.appshare.R
 import info.muge.appshare.items.AppItem
 import info.muge.appshare.ui.theme.AppDimens
 import info.muge.appshare.utils.PermissionExts
+import info.muge.appshare.utils.AppIconModel
 import java.util.Locale
 
 /**
@@ -399,7 +400,7 @@ internal fun LinearAppItem(
             Box {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(app.getIcon())
+                        .data(AppIconModel(app.getPackageName()))
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
@@ -524,7 +525,7 @@ internal fun GridAppItem(
                 Box {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(app.getIcon())
+                            .data(AppIconModel(app.getPackageName()))
                             .crossfade(true)
                             .build(),
                         contentDescription = null,
