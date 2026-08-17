@@ -545,13 +545,17 @@ class AppListViewModel : ViewModel() {
                         else -> return
                     }
 
-                    // 获取应用名（已卸载的无法获取名称）
+                    // 获取应用名：卸载后 PackageManager 已经查不到了，优先从内存里的
+                    // Global.app_list（上一次全量扫描留下的缓存）里找卸载前的名字，
+                    // 这样"已卸载"记录才能显示真实应用名而不是裸包名。
                     val appName = try {
                         val pm = context.packageManager
                         val appInfo = pm.getApplicationInfo(changedPkg, 0)
                         pm.getApplicationLabel(appInfo).toString()
                     } catch (_: Exception) {
-                        changedPkg
+                        synchronized(Global.app_list) {
+                            Global.getAppItemByPackageNameFromList(Global.app_list, changedPkg)?.getAppName()
+                        } ?: changedPkg
                     }
 
                     // 获取版本号

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.North
 import androidx.compose.material.icons.filled.East
 import androidx.compose.material.icons.filled.South
@@ -267,10 +268,11 @@ private fun ChangeRecordCard(record: AppChangeRecord, onClick: () -> Unit) {
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = record.appName.take(1),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        imageVector = Icons.Default.Android,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -372,8 +374,23 @@ private fun AppChangeDetailSheet(
                             .clip(RoundedCornerShape(AppDimens.Radius.md)),
                         contentScale = ContentScale.Crop
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(AppDimens.Radius.md))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Android,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
                         text = first.appName,
@@ -381,9 +398,13 @@ private fun AppChangeDetailSheet(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = first.packageName,
+                        text = if (icon != null) first.packageName else "未安装",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (icon != null) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
                     )
                 }
             }

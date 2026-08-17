@@ -122,8 +122,14 @@ fun AppListScreen(
     }
 
     // 监听应用安装/卸载/更新，自动刷新列表
+    // 注意：这个 DisposableEffect 只在"应用"这个页面挂载的时候生效——如果用户跳转到
+    // "应用变更记录"等子页面，这个页面会从组合树里移除，广播监听跟着被注销，
+    // 这期间发生的卸载完全收不到通知。所以每次重新回到这个页面（effect 重新执行）时，
+    // 都主动做一次冷启动式的离线变更校验（对比磁盘缓存快照），把这段时间错过的
+    // 安装/卸载/更新补记录回来，不能只靠广播这一条路。
     DisposableEffect(viewModel) {
         viewModel.registerPackageChangeListener(context)
+        viewModel.refreshAppList(context, isColdStart = true)
         onDispose {
             viewModel.unregisterPackageChangeListener(context)
         }
