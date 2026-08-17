@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.North
 import androidx.compose.material.icons.filled.East
 import androidx.compose.material.icons.filled.South
@@ -48,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -212,19 +213,29 @@ private fun changeTypeLabel(changeType: ChangeType): String = when (changeType) 
 }
 
 /**
+ * 解析变更记录用的图标：优先实时查 PackageManager（应用还在），查不到就用之前见过的
+ * 缓存图标兜底（应用已卸载但之前展示过），实在没有就返回 null。
+ * @return (图标, 是否仍已安装)
+ */
+private fun resolveChangeIcon(context: android.content.Context, packageName: String): Pair<android.graphics.drawable.Drawable?, Boolean> {
+    return try {
+        context.packageManager.getApplicationIcon(packageName) to true
+    } catch (_: PackageManager.NameNotFoundException) {
+        info.muge.appshare.utils.RecentIconCache.get(packageName) to false
+    }
+}
+
+/**
  * 列表项：图标 + 应用名 + 版本号 + "更新/安装于 HH:mm" + 右侧变更类型指示图标
  */
 @Composable
 private fun ChangeRecordCard(record: AppChangeRecord, onClick: () -> Unit) {
     val context = LocalContext.current
 
-    val icon = remember(record.packageName) {
-        try {
-            context.packageManager.getApplicationIcon(record.packageName)
-        } catch (_: PackageManager.NameNotFoundException) {
-            null
-        }
+    val (icon, isInstalled) = remember(record.packageName) {
+        resolveChangeIcon(context, record.packageName)
     }
+    val grayscaleFilter = remember { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) }
 
     val (typeIcon, typeColor) = changeTypeVisual(record.changeType)
     val timeVerb = when (record.changeType) {
@@ -258,23 +269,16 @@ private fun ChangeRecordCard(record: AppChangeRecord, onClick: () -> Unit) {
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(AppDimens.Radius.md)),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    colorFilter = if (!isInstalled) grayscaleFilter else null
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(AppDimens.Radius.md))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Android,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -340,13 +344,10 @@ private fun AppChangeDetailSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val first = records.first()
 
-    val icon = remember(first.packageName) {
-        try {
-            context.packageManager.getApplicationIcon(first.packageName)
-        } catch (_: PackageManager.NameNotFoundException) {
-            null
-        }
+    val (icon, isInstalled) = remember(first.packageName) {
+        resolveChangeIcon(context, first.packageName)
     }
+    val grayscaleFilter = remember { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -372,23 +373,16 @@ private fun AppChangeDetailSheet(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(AppDimens.Radius.md)),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        colorFilter = if (!isInstalled) grayscaleFilter else null
                     )
                 } else {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(AppDimens.Radius.md))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Android,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
@@ -398,9 +392,9 @@ private fun AppChangeDetailSheet(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (icon != null) first.packageName else "未安装",
+                        text = if (isInstalled) first.packageName else "未安装",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (icon != null) {
+                        color = if (isInstalled) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
                             MaterialTheme.colorScheme.error
@@ -500,7 +494,7 @@ private fun getDateGroup(timestamp: Long): String {
  * 格式化时间显示（列表用，简短）
  */
 private fun formatTime(timestamp: Long): String {
-    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(timestamp))
+    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
 }
 
 /**
