@@ -16,6 +16,7 @@ import info.muge.appshare.data.ChangeType
 import info.muge.appshare.items.AppItem
 import info.muge.appshare.tasks.RefreshInstalledListTask
 import info.muge.appshare.tasks.SearchAppItemTask
+import info.muge.appshare.utils.AppListCacheUtil
 import info.muge.appshare.utils.SPUtil
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,6 +94,8 @@ data class AppListUiState(
     val groupedAppList: Map<String, List<AppItem>> = emptyMap(),
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
+    // 冷启动秒开后，后台悄悄校验/刷新数据时为true。与 isRefreshing 区分开，
+    // 避免触发 PullToRefreshBox 的下拉刷新转圈图标（那个图标应只在用户手动下拉时出现）。
     val isBackgroundSyncing: Boolean = false,
     val loadingCurrent: Int = 0,
     val loadingTotal: Int = 0,
@@ -146,6 +149,17 @@ class AppListViewModel : ViewModel() {
         refreshJob = viewModelScope.launch {
             val task = RefreshInstalledListTask(context)
 
+            // 冷启动时先记下"上一次扫描缓存"的快照，稍后用来对比出离线期间（App未运行时）
+            // 发生的安装/卸载/更新，补全变更记录——这份快照会在 task.execute() 结束时被新数据覆盖，
+            // 所以必须在 execute() 之前先读出来。
+            val oldCacheSnapshot: Map<String, Triple<Long, Long, String>> = if (isColdStart) {
+                AppListCacheUtil.load(context).associate {
+                    it.packageName to Triple(it.versionCode, it.lastUpdateTime, it.title)
+                }
+            } else {
+                emptyMap()
+            }
+
             // 冷启动：先用磁盘缓存秒开一版列表，让用户马上看到内容，而不是空白转圈
             var quickLoaded = false
             if (isColdStart && !quickLoadAttempted) {
@@ -160,7 +174,8 @@ class AppListViewModel : ViewModel() {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            // 用“刷新中”而非“扫描中”的态，后台悄悄校验数据，不打断用户浏览
+                            // 注意：这里不设置 isRefreshing，避免触发下拉刷新的转圈图标；
+                            // 用专门的 isBackgroundSyncing 悄悄标记后台校验中，不打断用户浏览
                             isBackgroundSyncing = true,
                             appList = filtered,
                             groupedAppList = grouped
@@ -193,6 +208,14 @@ class AppListViewModel : ViewModel() {
                     }
                 }
             )
+
+            // 补全应用变更记录：
+            // 1) 用系统记住的 firstInstallTime/lastUpdateTime 回填"当前已安装应用"的历史（幂等，可重复调用）
+            // 2) 对比上一次缓存快照，补上离线期间发生的安装/卸载/更新
+            if (isColdStart) {
+                AppChangeRepository.backfillFromInstalledPackages(context)
+                AppChangeRepository.diffAndRecordOfflineChanges(context, oldCacheSnapshot, appList)
+            }
 
             // 收集所有安装来源
             val installers = appList.map { it.getInstallSource() }
@@ -243,7 +266,6 @@ class AppListViewModel : ViewModel() {
             _uiState.update {
                 it.copy(
                     isRefreshing = false,
-                    isBackgroundSyncing = false,
                     appList = filtered,
                     groupedAppList = grouped
                 )
@@ -535,13 +557,31 @@ class AppListViewModel : ViewModel() {
                         null
                     }
 
+                    // 获取安装来源（卸载的应用已查不到，取不到就是null）
+                    val installer = try {
+                        val installerPkg = context.packageManager.getInstallerPackageName(changedPkg)
+                        if (installerPkg.isNullOrBlank()) {
+                            null
+                        } else {
+                            try {
+                                val installerInfo = context.packageManager.getApplicationInfo(installerPkg, 0)
+                                context.packageManager.getApplicationLabel(installerInfo).toString()
+                            } catch (_: Exception) {
+                                installerPkg
+                            }
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+
                     AppChangeRepository.addRecord(
                         context,
                         AppChangeRecord(
                             packageName = changedPkg,
                             appName = appName,
                             changeType = changeType,
-                            versionName = versionName
+                            versionName = versionName,
+                            installer = installer
                         )
                     )
                 }

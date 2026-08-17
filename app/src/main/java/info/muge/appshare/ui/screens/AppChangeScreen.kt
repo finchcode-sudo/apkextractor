@@ -2,11 +2,13 @@ package info.muge.appshare.ui.screens
 
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,18 +22,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.North
+import androidx.compose.material.icons.filled.East
+import androidx.compose.material.icons.filled.South
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +72,18 @@ fun AppChangeScreen(
 ) {
     val context = LocalContext.current
     var records by remember { mutableStateOf(AppChangeRepository.getRecords(context)) }
+    var detailPackageName by remember { mutableStateOf<String?>(null) }
+
+    // 单个应用的完整历史时间线（点击列表项时弹出）
+    detailPackageName?.let { pkg ->
+        val appRecords = records.filter { it.packageName == pkg }.sortedByDescending { it.timestamp }
+        if (appRecords.isNotEmpty()) {
+            AppChangeDetailSheet(
+                records = appRecords,
+                onDismiss = { detailPackageName = null }
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -156,7 +174,10 @@ fun AppChangeScreen(
                     }
 
                     items(dayRecords, key = { "${it.packageName}_${it.timestamp}" }) { record ->
-                        ChangeRecordCard(record = record)
+                        ChangeRecordCard(
+                            record = record,
+                            onClick = { detailPackageName = record.packageName }
+                        )
                     }
                 }
 
@@ -168,11 +189,32 @@ fun AppChangeScreen(
     }
 }
 
+/**
+ * 变更类型对应的图标指示（颜色+图标），风格参考主流应用管理工具：
+ * 蓝色向上箭头 = 更新，绿色向右箭头 = 安装，红色向下箭头 = 卸载
+ */
 @Composable
-private fun ChangeRecordCard(record: AppChangeRecord) {
+private fun changeTypeVisual(changeType: ChangeType): Pair<androidx.compose.ui.graphics.vector.ImageVector, androidx.compose.ui.graphics.Color> {
+    return when (changeType) {
+        ChangeType.UPDATED -> Icons.Default.North to MaterialTheme.colorScheme.primary
+        ChangeType.INSTALLED -> Icons.Default.East to androidx.compose.ui.graphics.Color(0xFF2E7D32)
+        ChangeType.UNINSTALLED -> Icons.Default.South to MaterialTheme.colorScheme.error
+    }
+}
+
+private fun changeTypeLabel(changeType: ChangeType): String = when (changeType) {
+    ChangeType.INSTALLED -> "安装时间"
+    ChangeType.UPDATED -> "最近更新"
+    ChangeType.UNINSTALLED -> "已卸载"
+}
+
+/**
+ * 列表项：图标 + 应用名 + 版本号 + "更新/安装于 HH:mm" + 右侧变更类型指示图标
+ */
+@Composable
+private fun ChangeRecordCard(record: AppChangeRecord, onClick: () -> Unit) {
     val context = LocalContext.current
 
-    // 尝试获取应用图标
     val icon = remember(record.packageName) {
         try {
             context.packageManager.getApplicationIcon(record.packageName)
@@ -181,14 +223,17 @@ private fun ChangeRecordCard(record: AppChangeRecord) {
         }
     }
 
-    val (typeLabel, typeColor) = when (record.changeType) {
-        ChangeType.INSTALLED -> "安装" to MaterialTheme.colorScheme.primary
-        ChangeType.UPDATED -> "更新" to MaterialTheme.colorScheme.tertiary
-        ChangeType.UNINSTALLED -> "卸载" to MaterialTheme.colorScheme.error
+    val (typeIcon, typeColor) = changeTypeVisual(record.changeType)
+    val timeVerb = when (record.changeType) {
+        ChangeType.INSTALLED -> "Installed"
+        ChangeType.UPDATED -> "Updated"
+        ChangeType.UNINSTALLED -> "Uninstalled"
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(AppDimens.Radius.lg),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -200,7 +245,6 @@ private fun ChangeRecordCard(record: AppChangeRecord) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 应用图标
             if (icon != null) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
@@ -231,7 +275,6 @@ private fun ChangeRecordCard(record: AppChangeRecord) {
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // 应用信息
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = record.appName,
@@ -241,8 +284,17 @@ private fun ChangeRecordCard(record: AppChangeRecord) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
+                if (!record.versionName.isNullOrEmpty()) {
+                    Text(
+                        text = "Version: ${record.versionName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text(
-                    text = record.packageName,
+                    text = "$timeVerb ${formatTime(record.timestamp)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -252,35 +304,149 @@ private fun ChangeRecordCard(record: AppChangeRecord) {
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // 右侧：类型标签 + 时间
-            Column(horizontalAlignment = Alignment.End) {
-                // 类型标签
-                Box(
-                    modifier = Modifier
-                        .background(typeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
+            // 右侧圆形图标指示：颜色+方向一眼看出是安装/更新/卸载
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(typeColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = typeIcon,
+                    contentDescription = changeTypeLabel(record.changeType),
+                    tint = typeColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 单个应用的完整变更时间线（底部弹出），仿主流应用管理工具的"最近更新/安装时间"时间轴样式
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppChangeDetailSheet(
+    records: List<AppChangeRecord>,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState()
+    val first = records.first()
+
+    val icon = remember(first.packageName) {
+        try {
+            context.packageManager.getApplicationIcon(first.packageName)
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = AppDimens.Space.lg)
+                .padding(bottom = 24.dp)
+        ) {
+            // 应用名 + 图标
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(icon)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(AppDimens.Radius.md)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+                Column {
                     Text(
-                        text = typeLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = typeColor
+                        text = first.appName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = first.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                // 时间
-                Text(
-                    text = formatTime(record.timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-                // 版本
-                if (!record.versionName.isNullOrEmpty()) {
-                    Text(
-                        text = "v${record.versionName}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 时间轴：每一条记录一行，左侧图标+连接线，右侧详情
+            records.forEachIndexed { index, record ->
+                val (typeIcon, typeColor) = changeTypeVisual(record.changeType)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    // 左侧：图标 + 连接线
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(40.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(typeColor.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = typeIcon,
+                                contentDescription = null,
+                                tint = typeColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        if (index != records.lastIndex) {
+                            Box(
+                                modifier = Modifier
+                                    .width(2.dp)
+                                    .fillMaxHeight()
+                                    .background(MaterialTheme.colorScheme.outlineVariant)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.padding(bottom = 20.dp)) {
+                        Text(
+                            text = changeTypeLabel(record.changeType),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (!record.versionName.isNullOrEmpty()) {
+                            Text(
+                                text = "版本 ${record.versionName}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = formatFullDateTime(record.timestamp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (!record.installer.isNullOrEmpty()) {
+                            Text(
+                                text = record.installer,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -301,13 +467,20 @@ private fun getDateGroup(timestamp: Long): String {
                 cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> "今天"
         cal.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
                 cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) - 1 -> "昨天"
-        else -> SimpleDateFormat("MM月dd日", Locale.getDefault()).format(Date(timestamp))
+        else -> SimpleDateFormat("yyyy年MM月dd日 EEEE", Locale.CHINA).format(Date(timestamp))
     }
 }
 
 /**
- * 格式化时间显示
+ * 格式化时间显示（列表用，简短）
  */
 private fun formatTime(timestamp: Long): String {
-    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
+    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(timestamp))
+}
+
+/**
+ * 格式化完整日期时间显示（详情时间轴用）
+ */
+private fun formatFullDateTime(timestamp: Long): String {
+    return SimpleDateFormat("yyyy年M月d日 HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
 }
