@@ -216,6 +216,7 @@
 
     <string name="snack_bar_clipboard">已复制到剪贴板</string>
     <string name="snack_bar_no_app_selected">请选择应用</string>
+    <string name="snack_bar_uninstall_finished">批量卸载已完成</string>
 
     <string name="external_storage">外置存储</string>
 
@@ -285,6 +286,7 @@
     <string name="permission_read_app_list">需要授予读取应用列表权限</string>
     <string name="permission_grant_short">授予</string>
     <string name="copy_package_names">复制包名</string>
+    <string name="action_batch_uninstall">批量卸载</string>
     <string name="app_no_launcher">应用没有界面，无法运行</string>
     <string name="choose_action">选择操作</string>
     <string name="copied">已复制</string>

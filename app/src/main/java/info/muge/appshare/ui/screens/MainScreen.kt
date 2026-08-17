@@ -296,7 +296,8 @@ fun MainScreen(
             ) {
                 SettingsScreen(
                     onNavigateToAppChange = onNavigateToAppChange,
-                    onNavigateToThemeSettings = onNavigateToThemeSettings
+                    onNavigateToThemeSettings = onNavigateToThemeSettings,
+                    onNavigateToAppDetailWithUri = onNavigateToAppDetailWithUri
                 )
             }
         }

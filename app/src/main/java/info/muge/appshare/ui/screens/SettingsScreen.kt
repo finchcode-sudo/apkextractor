@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -65,7 +66,8 @@ import info.muge.appshare.utils.toast
 @Composable
 fun SettingsScreen(
     onNavigateToAppChange: () -> Unit = {},
-    onNavigateToThemeSettings: () -> Unit = {}
+    onNavigateToThemeSettings: () -> Unit = {},
+    onNavigateToAppDetailWithUri: (Uri) -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings = SPUtil.getGlobalSharedPreferences(context)
@@ -79,6 +81,37 @@ fun SettingsScreen(
     var showStoragePathDialog by remember { mutableStateOf(false) }
     var showExtensionDialog by remember { mutableStateOf(false) }
     var showDeviceNameDialog by remember { mutableStateOf(false) }
+
+    // APK 分析器：选择一个 apk 文件，跳转到应用详情页（复用已支持"未安装apk"的详情页逻辑）
+    val apkAnalyzerLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { onNavigateToAppDetailWithUri(it) }
+    }
+
+    // 安装 APK：选择一个 apk 文件，直接调起系统安装器
+    val apkInstallLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { selectedUri ->
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    selectedUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) { }
+            try {
+                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(selectedUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(installIntent)
+            } catch (e: Exception) {
+                "无法打开系统安装器：${e.message}".toast()
+            }
+        }
+    }
 
     // 设置值
     var languageValue by remember { mutableIntStateOf(settings.getInt(Constants.PREFERENCE_LANGUAGE, Constants.PREFERENCE_LANGUAGE_DEFAULT)) }
@@ -212,6 +245,35 @@ fun SettingsScreen(
             title = "应用变更记录",
             value = "查看安装、更新、卸载记录",
             onClick = onNavigateToAppChange
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 分组标题：APK 工具
+        SectionTitle(title = "APK 工具")
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 安装 APK：选择本地 apk 文件直接安装
+        SettingItem(
+            iconRes = R.drawable.ic_folder,
+            title = "安装 APK",
+            value = "选择一个 apk 文件进行安装",
+            onClick = {
+                apkInstallLauncher.launch(arrayOf("application/vnd.android.package-archive"))
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // APK 分析器：无需安装即可查看 apk 的详细信息（权限、组件、签名等）
+        SettingItem(
+            iconRes = R.drawable.ic_info,
+            title = "APK 分析器",
+            value = "查看未安装 apk 文件的详细信息",
+            onClick = {
+                apkAnalyzerLauncher.launch(arrayOf("application/vnd.android.package-archive"))
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))

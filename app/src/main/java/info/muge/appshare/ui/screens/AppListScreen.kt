@@ -3,6 +3,10 @@ package info.muge.appshare.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,8 +36,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +78,43 @@ fun AppListScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // 批量卸载：系统不允许非root应用静默卸载多个应用，只能逐个弹出系统确认框排队处理
+    var uninstallQueue by remember { mutableStateOf<List<String>>(emptyList()) }
+    var uninstallIndex by remember { mutableStateOf(0) }
+    val uninstallLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        // 无论用户确认还是取消这一个，都继续弹下一个，直到队列处理完
+        val nextIndex = uninstallIndex + 1
+        if (nextIndex < uninstallQueue.size) {
+            uninstallIndex = nextIndex
+        } else {
+            uninstallQueue = emptyList()
+            uninstallIndex = 0
+            scope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.snack_bar_uninstall_finished))
+            }
+        }
+    }
+    LaunchedEffect(uninstallQueue, uninstallIndex) {
+        if (uninstallQueue.isNotEmpty() && uninstallIndex < uninstallQueue.size) {
+            val packageName = uninstallQueue[uninstallIndex]
+            val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
+            try {
+                uninstallLauncher.launch(intent)
+            } catch (e: Exception) {
+                // 该应用无法卸载（如系统应用），跳过继续下一个
+                val nextIndex = uninstallIndex + 1
+                if (nextIndex < uninstallQueue.size) {
+                    uninstallIndex = nextIndex
+                } else {
+                    uninstallQueue = emptyList()
+                    uninstallIndex = 0
+                }
+            }
+        }
+    }
 
     // 初始化
     LaunchedEffect(Unit) {
@@ -204,6 +247,16 @@ fun AppListScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(context.getString(R.string.snack_bar_clipboard))
                         }
+                    },
+                    onUninstallSelected = {
+                        if (state.selectedItems.isEmpty()) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(context.getString(R.string.snack_bar_no_app_selected))
+                            }
+                            return@MultiSelectCard
+                        }
+                        uninstallQueue = state.selectedItems.toList()
+                        uninstallIndex = 0
                     }
                 )
             }

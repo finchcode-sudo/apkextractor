@@ -273,7 +273,8 @@ internal fun MultiSelectCard(
     onSelectAll: () -> Unit,
     onInvertSelection: () -> Unit,
     onDeselectAll: () -> Unit,
-    onCopyPackageNames: () -> Unit
+    onCopyPackageNames: () -> Unit,
+    onUninstallSelected: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -355,6 +356,19 @@ internal fun MultiSelectCard(
                 FilledTonalButton(onClick = onCopyPackageNames) {
                     Text(
                         text = stringResource(R.string.copy_package_names),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+
+                FilledTonalButton(
+                    onClick = onUninstallSelected,
+                    colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_batch_uninstall),
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
