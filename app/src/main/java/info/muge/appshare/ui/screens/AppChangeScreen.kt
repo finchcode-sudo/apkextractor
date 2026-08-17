@@ -61,6 +61,7 @@ import info.muge.appshare.data.AppChangeRecord
 import info.muge.appshare.data.AppChangeRepository
 import info.muge.appshare.data.ChangeType
 import info.muge.appshare.ui.theme.AppDimens
+import info.muge.appshare.utils.RecentIconCache
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -221,7 +222,7 @@ private fun resolveChangeIcon(context: android.content.Context, packageName: Str
     return try {
         context.packageManager.getApplicationIcon(packageName) to true
     } catch (_: PackageManager.NameNotFoundException) {
-        info.muge.appshare.utils.RecentIconCache.get(packageName) to false
+        RecentIconCache.get(packageName) to false
     }
 }
 

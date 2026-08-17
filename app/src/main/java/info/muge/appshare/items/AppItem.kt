@@ -14,6 +14,7 @@ import info.muge.appshare.Constants
 import info.muge.appshare.utils.EnvironmentUtil
 import info.muge.appshare.utils.FileUtil
 import info.muge.appshare.utils.PinyinUtil
+import info.muge.appshare.utils.RecentIconCache
 import info.muge.appshare.utils.SPUtil
 import java.io.File
 
@@ -222,7 +223,7 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         val icon = if (ctx != null && appInfo != null) {
             try {
                 val fetched = ctx.packageManager.getApplicationIcon(appInfo)
-                info.muge.appshare.utils.RecentIconCache.put(getPackageName(), fetched)
+                RecentIconCache.put(getPackageName(), fetched)
                 fetched
             } catch (e: Exception) {
                 ctx.packageManager.defaultActivityIcon
