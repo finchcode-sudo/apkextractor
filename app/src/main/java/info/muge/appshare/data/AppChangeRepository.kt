@@ -59,7 +59,7 @@ data class AppChangeRecord(
 object AppChangeRepository {
     private const val PREFS_NAME = "app_change_records"
     private const val KEY_RECORDS = "records"
-    private const val MAX_RECORDS = 200
+    private const val MAX_RECORDS = 5000
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

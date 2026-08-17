@@ -3,6 +3,8 @@ package info.muge.appshare.ui.screens
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -333,7 +335,7 @@ private fun AppChangeDetailSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val first = records.first()
 
     val icon = remember(first.packageName) {
@@ -351,6 +353,8 @@ private fun AppChangeDetailSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = AppDimens.Space.lg)
                 .padding(bottom = 24.dp)
         ) {
