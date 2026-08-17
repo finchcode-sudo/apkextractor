@@ -38,6 +38,20 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- 静态注册：即使AppShare进程被系统杀掉，装/卸/更新应用时系统也会唤醒进程投递这个广播，
+             用来可靠记录应用变更历史，弥补动态注册接收器只在App存活时才生效的缺陷 -->
+        <receiver
+            android:name=".utils.PackageChangeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
         <meta-data
             android:name="android.max_aspect"
             android:value="2.4" />

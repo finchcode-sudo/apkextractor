@@ -10,9 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import info.muge.appshare.Constants
 import info.muge.appshare.Global
-import info.muge.appshare.data.AppChangeRecord
 import info.muge.appshare.data.AppChangeRepository
-import info.muge.appshare.data.ChangeType
 import info.muge.appshare.items.AppItem
 import info.muge.appshare.tasks.RefreshInstalledListTask
 import info.muge.appshare.tasks.SearchAppItemTask
@@ -515,84 +513,23 @@ class AppListViewModel : ViewModel() {
     private var packageChangeReceiver: BroadcastReceiver? = null
 
     /**
-     * 注册应用安装/卸载/更新广播监听
+     * 注册应用安装/卸载/更新广播监听（仅用于App存活时"实时刷新界面列表"，
+     * 记录变更历史的职责已经移交给清单里静态注册的 PackageChangeReceiver，
+     * 那边不管进程死活都能可靠触发，这里不再重复写记录，避免同一事件记两遍）
      */
     fun registerPackageChangeListener(context: Context) {
         if (packageChangeReceiver != null) return
 
         packageChangeReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                // 忽略自身包名的变化
                 val changedPkg = intent?.data?.schemeSpecificPart
                 if (changedPkg == context.packageName) return
 
-                // 记录变更
                 val action = intent?.action
-                if (changedPkg != null && action != null) {
-                    val changeType = when (action) {
-                        Intent.ACTION_PACKAGE_ADDED -> {
-                            if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false))
-                                ChangeType.UPDATED
-                            else
-                                ChangeType.INSTALLED
-                        }
-                        Intent.ACTION_PACKAGE_REMOVED -> {
-                            if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false))
-                                return // PACKAGE_REMOVED + REPLACING = 更新前的移除，忽略
-                            else
-                                ChangeType.UNINSTALLED
-                        }
-                        else -> return
-                    }
-
-                    // 获取应用名：卸载后 PackageManager 已经查不到了，优先从内存里的
-                    // Global.app_list（上一次全量扫描留下的缓存）里找卸载前的名字，
-                    // 这样"已卸载"记录才能显示真实应用名而不是裸包名。
-                    val appName = try {
-                        val pm = context.packageManager
-                        val appInfo = pm.getApplicationInfo(changedPkg, 0)
-                        pm.getApplicationLabel(appInfo).toString()
-                    } catch (_: Exception) {
-                        synchronized(Global.app_list) {
-                            Global.getAppItemByPackageNameFromList(Global.app_list, changedPkg)?.getAppName()
-                        } ?: changedPkg
-                    }
-
-                    // 获取版本号
-                    val versionName = try {
-                        context.packageManager.getPackageInfo(changedPkg, 0).versionName
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                    // 获取安装来源（卸载的应用已查不到，取不到就是null）
-                    val installer = try {
-                        val installerPkg = context.packageManager.getInstallerPackageName(changedPkg)
-                        if (installerPkg.isNullOrBlank()) {
-                            null
-                        } else {
-                            try {
-                                val installerInfo = context.packageManager.getApplicationInfo(installerPkg, 0)
-                                context.packageManager.getApplicationLabel(installerInfo).toString()
-                            } catch (_: Exception) {
-                                installerPkg
-                            }
-                        }
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                    AppChangeRepository.addRecord(
-                        context,
-                        AppChangeRecord(
-                            packageName = changedPkg,
-                            appName = appName,
-                            changeType = changeType,
-                            versionName = versionName,
-                            installer = installer
-                        )
-                    )
-                }
+                if (action != Intent.ACTION_PACKAGE_ADDED &&
+                    action != Intent.ACTION_PACKAGE_REMOVED &&
+                    action != Intent.ACTION_PACKAGE_REPLACED
+                ) return
 
                 // 自动刷新列表
                 if (_uiState.value.hasPermission && !_uiState.value.isLoading) {
