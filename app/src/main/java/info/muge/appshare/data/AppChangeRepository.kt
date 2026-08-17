@@ -2,6 +2,7 @@ package info.muge.appshare.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import info.muge.appshare.utils.DiskIconCache
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -148,6 +149,18 @@ object AppChangeRepository {
                 pm.getApplicationLabel(info.applicationInfo!!).toString()
             } catch (_: Exception) {
                 packageName
+            }
+
+            // 顺手给这个应用缓存一份图标（供以后卸载时兜底展示用）。
+            // 先查磁盘文件是不是已经存在，已经有了就跳过昂贵的 getApplicationIcon 调用——
+            // 这样只有"第一次遇到这个应用"时才会真正付出取图标的开销，
+            // 不会导致每次冷启动都要为几百个应用重复取一遍图标拖慢速度。
+            if (!DiskIconCache.has(context, packageName)) {
+                try {
+                    val icon = pm.getApplicationIcon(info.applicationInfo!!)
+                    DiskIconCache.save(context, packageName, icon)
+                } catch (_: Exception) {
+                }
             }
 
             val installTime = info.firstInstallTime

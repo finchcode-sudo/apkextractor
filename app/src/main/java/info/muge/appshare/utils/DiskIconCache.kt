@@ -35,23 +35,40 @@ object DiskIconCache {
 
     /**
      * 异步保存图标到磁盘（自动切到后台线程执行，调用方在任何线程调用都安全）。
-     * 已存在就跳过，避免重复写入同一个文件。
+     * 用于单个应用的即时缓存场景（比如列表滚动到某一个应用图标时）。
      */
     fun saveAsync(context: Context, packageName: String, drawable: Drawable) {
         val appContext = context.applicationContext
         Thread {
-            try {
-                val file = fileFor(appContext, packageName)
-                if (file.exists()) return@Thread
-
-                val bitmap = drawableToBitmap(drawable, ICON_SIZE_PX)
-                FileOutputStream(file).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
-                }
-            } catch (_: Exception) {
-                // 缓存失败不影响主流程，忽略即可
-            }
+            save(appContext, packageName, drawable)
         }.start()
+    }
+
+    /**
+     * 同步保存（调用方需要自己保证在后台线程调用，比如已经在 Dispatchers.IO 协程里）。
+     * 用于批量场景（比如一次性给几百个已安装应用都存一份图标），
+     * 避免像 saveAsync 那样每个应用都单独开一条线程，几百个应用会瞬间甩出几百个线程。
+     * 已存在就跳过，避免重复写入同一个文件。
+     */
+    fun save(context: Context, packageName: String, drawable: Drawable) {
+        try {
+            val file = fileFor(context, packageName)
+            if (file.exists()) return
+
+            val bitmap = drawableToBitmap(drawable, ICON_SIZE_PX)
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+            }
+        } catch (_: Exception) {
+            // 缓存失败不影响主流程，忽略即可
+        }
+    }
+
+    /**
+     * 判断某个包名是否已经缓存过图标（批量场景用来跳过已缓存的，避免重复取图标浪费时间）
+     */
+    fun has(context: Context, packageName: String): Boolean {
+        return fileFor(context.applicationContext, packageName).exists()
     }
 
     /**
