@@ -44,8 +44,15 @@ class AppItem : Comparable<AppItem>, DisplayItem {
 
     private val installSource: String
     private val launchingClass: String
-    private val static_receivers_bundle: Bundle
     private val splitSourceDirs: Array<String>?
+
+    // 静态广播扫描较耗时（需解析 manifest），改为懒加载，仅在详情页真正用到时才计算
+    @Transient
+    private var cachedStaticReceiversBundle: Bundle? = null
+    @Transient
+    private var staticReceiversContext: Context? = null
+    @Transient
+    private var staticReceiversPackageName: String? = null
 
     // 仅当构造ExportTask时用
     @Transient
@@ -96,7 +103,8 @@ class AppItem : Comparable<AppItem>, DisplayItem {
             e.printStackTrace()
         }
         this.launchingClass = launchingClass
-        this.static_receivers_bundle = EnvironmentUtil.getStaticRegisteredReceiversOfBundleTypeForPackageName(context, info.packageName!!)
+        this.staticReceiversContext = context.applicationContext
+        this.staticReceiversPackageName = info.packageName
         this.splitSourceDirs = info.applicationInfo?.splitSourceDirs
     }
 
@@ -116,8 +124,33 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         this.exportData = flag_data
         this.exportObb = flag_obb
         this.fileItem = wrapper.fileItem
-        this.static_receivers_bundle = wrapper.static_receivers_bundle
+        this.cachedStaticReceiversBundle = wrapper.cachedStaticReceiversBundle
+        this.staticReceiversContext = wrapper.staticReceiversContext
+        this.staticReceiversPackageName = wrapper.staticReceiversPackageName
         this.splitSourceDirs = wrapper.splitSourceDirs
+    }
+
+    /**
+     * 从磁盘缓存快速恢复一个AppItem，跳过耗时计算（安装来源、启动类、静态广播），
+     * 仅重新获取图标（较快，系统本身有图标缓存）。用于冷启动时"秒开"上次的扫描结果。
+     * @param cache 上次持久化的轻量缓存条目
+     */
+    constructor(context: Context, info: PackageInfo, cache: AppItemCacheEntry) {
+        val packageManager = context.applicationContext.packageManager
+        this.info = info
+        this.fileItem = FileItem(File(info.applicationInfo!!.sourceDir))
+        this.title = cache.title
+        this.size = cache.size
+        this.drawable = try {
+            packageManager.getApplicationIcon(info.applicationInfo!!)
+        } catch (e: Exception) {
+            packageManager.defaultActivityIcon
+        }
+        this.installSource = cache.installSource
+        this.launchingClass = cache.launchingClass
+        this.staticReceiversContext = context.applicationContext
+        this.staticReceiversPackageName = info.packageName
+        this.splitSourceDirs = info.applicationInfo?.splitSourceDirs
     }
 
     /**
@@ -160,7 +193,7 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         this.size = File(filePath).length()
         this.installSource = "External File"
         this.launchingClass = ""
-        this.static_receivers_bundle = Bundle()
+        this.cachedStaticReceiversBundle = Bundle()
         this.splitSourceDirs = null
     }
 
@@ -218,7 +251,39 @@ class AppItem : Comparable<AppItem>, DisplayItem {
 
     fun getFileItem(): FileItem = fileItem
 
-    fun getStaticReceiversBundle(): Bundle = static_receivers_bundle
+    /**
+     * 获取静态广播接收者信息（懒加载：首次调用时才实际扫描 manifest，结果会缓存）
+     */
+    fun getStaticReceiversBundle(): Bundle {
+        cachedStaticReceiversBundle?.let { return it }
+        val ctx = staticReceiversContext
+        val pkg = staticReceiversPackageName
+        val bundle = if (ctx != null && pkg != null) {
+            try {
+                EnvironmentUtil.getStaticRegisteredReceiversOfBundleTypeForPackageName(ctx, pkg)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Bundle()
+            }
+        } else {
+            Bundle()
+        }
+        cachedStaticReceiversBundle = bundle
+        return bundle
+    }
+
+    /**
+     * 生成用于磁盘缓存的轻量快照
+     */
+    fun toCacheEntry(): AppItemCacheEntry = AppItemCacheEntry(
+        packageName = getPackageName(),
+        versionCode = info.longVersionCode,
+        lastUpdateTime = info.lastUpdateTime,
+        title = title,
+        size = size,
+        installSource = installSource,
+        launchingClass = launchingClass
+    )
 
     fun getSplitSourceDirs(): Array<String>? = splitSourceDirs
 
