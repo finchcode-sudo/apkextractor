@@ -58,6 +58,13 @@ class PackageChangeReceiver : BroadcastReceiver() {
 
                 val appName = try {
                     val appInfo = pm.getApplicationInfo(changedPkg, 0)
+                    // 应用还在（安装/更新事件）：顺手把图标存到磁盘缓存，
+                    // 这样哪怕用户从没打开过AppShare看过这个应用，以后它被卸载时
+                    // 也能有真实图标可用，而不用等用户曾经手动看过一次列表
+                    try {
+                        val icon = pm.getApplicationIcon(appInfo)
+                        DiskIconCache.saveAsync(appContext, changedPkg, icon)
+                    } catch (_: Exception) { }
                     pm.getApplicationLabel(appInfo).toString()
                 } catch (_: Exception) {
                     // 已卸载查不到了：先试内存缓存（进程恰好还活着的话），

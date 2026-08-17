@@ -222,7 +222,7 @@ private fun resolveChangeIcon(context: android.content.Context, packageName: Str
     return try {
         context.packageManager.getApplicationIcon(packageName) to true
     } catch (_: PackageManager.NameNotFoundException) {
-        RecentIconCache.get(packageName) to false
+        RecentIconCache.get(context, packageName) to false
     }
 }
 

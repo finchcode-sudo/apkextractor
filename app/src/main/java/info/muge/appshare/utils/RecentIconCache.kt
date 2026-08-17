@@ -1,5 +1,6 @@
 package info.muge.appshare.utils
 
+import android.content.Context
 import android.graphics.drawable.Drawable
 
 /**
@@ -29,8 +30,27 @@ object RecentIconCache {
         cache[packageName] = drawable
     }
 
+    /**
+     * 同时存进内存缓存和磁盘缓存（需要context时用这个，比如从Coil Fetcher/AppItem里调用）。
+     * 磁盘写入是异步的，不会阻塞调用方。
+     */
+    fun put(context: Context, packageName: String, drawable: Drawable) {
+        put(packageName, drawable)
+        DiskIconCache.saveAsync(context, packageName, drawable)
+    }
+
     @Synchronized
     fun get(packageName: String): Drawable? {
         return cache[packageName]
+    }
+
+    /**
+     * 优先查内存，查不到再查磁盘（磁盘缓存能扛住进程被杀重启，内存缓存不能）。
+     */
+    fun get(context: Context, packageName: String): Drawable? {
+        get(packageName)?.let { return it }
+        val fromDisk = DiskIconCache.load(context, packageName) ?: return null
+        put(packageName, fromDisk) // 顺手放回内存，下次更快
+        return fromDisk
     }
 }

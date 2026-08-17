@@ -223,7 +223,7 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         val icon = if (ctx != null && appInfo != null) {
             try {
                 val fetched = ctx.packageManager.getApplicationIcon(appInfo)
-                RecentIconCache.put(getPackageName(), fetched)
+                RecentIconCache.put(ctx, getPackageName(), fetched)
                 fetched
             } catch (e: Exception) {
                 ctx.packageManager.defaultActivityIcon
