@@ -93,6 +93,7 @@ data class AppListUiState(
     val groupedAppList: Map<String, List<AppItem>> = emptyMap(),
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
+    val isBackgroundSyncing: Boolean = false,
     val loadingCurrent: Int = 0,
     val loadingTotal: Int = 0,
     val hasPermission: Boolean = false,
@@ -160,7 +161,7 @@ class AppListViewModel : ViewModel() {
                         it.copy(
                             isLoading = false,
                             // 用“刷新中”而非“扫描中”的态，后台悄悄校验数据，不打断用户浏览
-                            isRefreshing = true,
+                            isBackgroundSyncing = true,
                             appList = filtered,
                             groupedAppList = grouped
                         )
@@ -210,6 +211,7 @@ class AppListViewModel : ViewModel() {
                 it.copy(
                     isLoading = false,
                     isRefreshing = false,
+                    isBackgroundSyncing = false,
                     appList = filtered,
                     groupedAppList = grouped,
                     availableInstallers = installers
@@ -241,6 +243,7 @@ class AppListViewModel : ViewModel() {
             _uiState.update {
                 it.copy(
                     isRefreshing = false,
+                    isBackgroundSyncing = false,
                     appList = filtered,
                     groupedAppList = grouped
                 )
