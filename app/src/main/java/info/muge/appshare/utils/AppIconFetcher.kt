@@ -32,7 +32,9 @@ class AppIconFetcher(
         val packageManager = context.packageManager
         val drawable = try {
             val appInfo = packageManager.getApplicationInfo(packageName, 0)
-            packageManager.getApplicationIcon(appInfo)
+            val icon = packageManager.getApplicationIcon(appInfo)
+            RecentIconCache.put(packageName, icon)
+            icon
         } catch (e: Exception) {
             packageManager.defaultActivityIcon
         }

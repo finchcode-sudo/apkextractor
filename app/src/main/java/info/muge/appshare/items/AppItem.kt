@@ -221,7 +221,9 @@ class AppItem : Comparable<AppItem>, DisplayItem {
         val appInfo = info.applicationInfo
         val icon = if (ctx != null && appInfo != null) {
             try {
-                ctx.packageManager.getApplicationIcon(appInfo)
+                val fetched = ctx.packageManager.getApplicationIcon(appInfo)
+                info.muge.appshare.utils.RecentIconCache.put(getPackageName(), fetched)
+                fetched
             } catch (e: Exception) {
                 ctx.packageManager.defaultActivityIcon
             }
