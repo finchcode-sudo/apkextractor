@@ -100,10 +100,10 @@ fun AppListScreen(
         }
     }
 
-    // 权限授予后刷新
+    // 权限授予后刷新（冷启动：先读磁盘缓存秒开，再后台全量校验刷新）
     LaunchedEffect(state.hasPermission) {
         if (state.hasPermission && state.appList.isEmpty()) {
-            viewModel.refreshAppList(context)
+            viewModel.refreshAppList(context, isColdStart = true)
         }
     }
 
