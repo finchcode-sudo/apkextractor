@@ -129,31 +129,67 @@ class AppListViewModel : ViewModel() {
         _uiState.update { it.copy(hasPermission = hasPermission) }
     }
 
+    // 是否已经完成过一次“秒开”式的磁盘缓存加载，避免同一进程内重复读盘
+    private var quickLoadAttempted = false
+
     /**
      * 刷新应用列表
+     * @param isColdStart 是否为冷启动（进程首次进入该页面）。冷启动时会先尝试用磁盘缓存"秒开"，
+     *        再在后台做一次真正的全量刷新；非冷启动（比如设置变更后手动刷新）则直接全量刷新。
      */
-    fun refreshAppList(context: Context) {
+    fun refreshAppList(context: Context, isColdStart: Boolean = false) {
         if (!_uiState.value.hasPermission) return
 
         refreshJob?.cancel()
-        _uiState.update {
-            it.copy(
-                isLoading = true,
-                loadingCurrent = 0,
-                loadingTotal = 0,
-                appList = emptyList(),
-                groupedAppList = emptyMap()
-            )
-        }
 
         refreshJob = viewModelScope.launch {
             val task = RefreshInstalledListTask(context)
+
+            // 冷启动：先用磁盘缓存秒开一版列表，让用户马上看到内容，而不是空白转圈
+            var quickLoaded = false
+            if (isColdStart && !quickLoadAttempted) {
+                quickLoadAttempted = true
+                val cachedList = task.quickLoadFromCache()
+                if (cachedList.isNotEmpty()) {
+                    quickLoaded = true
+                    val currentState = _uiState.value
+                    val filtered = applyFilter(cachedList, currentState.filterConfig)
+                    val grouped = applyGroup(filtered, currentState.groupMode)
+                    buildAlphabetIndex(filtered)
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            // 用“刷新中”而非“扫描中”的态，后台悄悄校验数据，不打断用户浏览
+                            isRefreshing = true,
+                            appList = filtered,
+                            groupedAppList = grouped
+                        )
+                    }
+                }
+            }
+
+            if (!quickLoaded) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = true,
+                        loadingCurrent = 0,
+                        loadingTotal = 0,
+                        appList = emptyList(),
+                        groupedAppList = emptyMap()
+                    )
+                }
+            }
+
             val appList = task.execute(
                 onProgressStarted = { total ->
-                    _uiState.update { it.copy(loadingTotal = total) }
+                    if (!quickLoaded) {
+                        _uiState.update { it.copy(loadingTotal = total) }
+                    }
                 },
                 onProgressUpdated = { current, total ->
-                    _uiState.update { it.copy(loadingCurrent = current, loadingTotal = total) }
+                    if (!quickLoaded) {
+                        _uiState.update { it.copy(loadingCurrent = current, loadingTotal = total) }
+                    }
                 }
             )
 
