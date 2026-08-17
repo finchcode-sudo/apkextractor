@@ -18,12 +18,14 @@ import info.muge.appshare.tasks.RefreshInstalledListTask
 import info.muge.appshare.tasks.SearchAppItemTask
 import info.muge.appshare.utils.AppListCacheUtil
 import info.muge.appshare.utils.SPUtil
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
@@ -213,8 +215,10 @@ class AppListViewModel : ViewModel() {
             // 1) 用系统记住的 firstInstallTime/lastUpdateTime 回填"当前已安装应用"的历史（幂等，可重复调用）
             // 2) 对比上一次缓存快照，补上离线期间发生的安装/卸载/更新
             if (isColdStart) {
-                AppChangeRepository.backfillFromInstalledPackages(context)
-                AppChangeRepository.diffAndRecordOfflineChanges(context, oldCacheSnapshot, appList)
+                withContext(Dispatchers.IO) {
+                    AppChangeRepository.backfillFromInstalledPackages(context)
+                    AppChangeRepository.diffAndRecordOfflineChanges(context, oldCacheSnapshot, appList)
+                }
             }
 
             // 收集所有安装来源

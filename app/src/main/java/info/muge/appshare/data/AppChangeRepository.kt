@@ -107,6 +107,9 @@ object AppChangeRepository {
         }
     }
 
+    private fun recordKey(packageName: String, changeType: ChangeType, timestamp: Long) =
+        "$packageName|${changeType.name}|$timestamp"
+
     /**
      * 用系统当前掌握的信息（PackageManager 的 firstInstallTime / lastUpdateTime）
      * 回填"当前已安装应用"的安装、更新历史。
@@ -118,7 +121,9 @@ object AppChangeRepository {
      * 局限：如果某个应用在本方法第一次运行之前就已经"装了又卸载"，系统不会保留任何痕迹，
      * 这部分历史无法恢复——这是系统层面的限制，任何非root应用都无法绕过。
      *
-     * 本方法可重复安全调用（幂等），已存在的记录不会被重复添加。
+     * 本方法可重复安全调用（幂等，已存在的记录不会被重复添加）。
+     * 注意：本方法涉及大量 PackageManager 查询与磁盘IO，调用方必须在后台线程（如 Dispatchers.IO）执行，
+     * 绝不能在主线程调用，否则遍历几百个应用会导致明显卡顿甚至 ANR。
      */
     fun backfillFromInstalledPackages(context: Context) {
         val packages = try {
@@ -127,6 +132,14 @@ object AppChangeRepository {
             return
         }
         val pm = context.packageManager
+
+        // 一次性读出已有记录，后续全部在内存里去重判断，避免每个应用都重复读写一遍磁盘
+        val existingRecords = getRecords(context).toMutableList()
+        val existingKeys = existingRecords.mapTo(HashSet()) {
+            recordKey(it.packageName, it.changeType, it.timestamp)
+        }
+        val newRecords = ArrayList<AppChangeRecord>()
+
         for (info in packages) {
             val packageName = info.packageName ?: continue
             if (packageName == context.packageName) continue
@@ -138,9 +151,9 @@ object AppChangeRepository {
             }
 
             val installTime = info.firstInstallTime
-            if (installTime > 0 && !hasRecord(context, packageName, ChangeType.INSTALLED, installTime)) {
-                addRecord(
-                    context,
+            val installKey = recordKey(packageName, ChangeType.INSTALLED, installTime)
+            if (installTime > 0 && existingKeys.add(installKey)) {
+                newRecords.add(
                     AppChangeRecord(
                         packageName = packageName,
                         appName = appName,
@@ -153,11 +166,9 @@ object AppChangeRepository {
             }
 
             val updateTime = info.lastUpdateTime
-            if (updateTime > 0 && updateTime != installTime &&
-                !hasRecord(context, packageName, ChangeType.UPDATED, updateTime)
-            ) {
-                addRecord(
-                    context,
+            val updateKey = recordKey(packageName, ChangeType.UPDATED, updateTime)
+            if (updateTime > 0 && updateTime != installTime && existingKeys.add(updateKey)) {
+                newRecords.add(
                     AppChangeRecord(
                         packageName = packageName,
                         appName = appName,
@@ -169,6 +180,10 @@ object AppChangeRepository {
                 )
             }
         }
+
+        if (newRecords.isNotEmpty()) {
+            addRecordsBatch(context, existingRecords, newRecords)
+        }
     }
 
     /**
@@ -177,6 +192,8 @@ object AppChangeRepository {
      *
      * @param oldPackages 上一次扫描缓存里的 包名 -> (versionCode, lastUpdateTime, appName)
      * @param newList 这一次最新扫描到的应用列表
+     *
+     * 注意：本方法涉及大量 PackageManager 查询与磁盘IO，调用方必须在后台线程（如 Dispatchers.IO）执行。
      */
     fun diffAndRecordOfflineChanges(
         context: Context,
@@ -187,15 +204,22 @@ object AppChangeRepository {
 
         val newPackageNames = newList.map { it.getPackageName() }.toSet()
 
+        // 一次性读出已有记录，后续全部在内存里去重判断
+        val existingRecords = getRecords(context).toMutableList()
+        val existingKeys = existingRecords.mapTo(HashSet()) {
+            recordKey(it.packageName, it.changeType, it.timestamp)
+        }
+        val newRecords = ArrayList<AppChangeRecord>()
+
         // 新出现的包名：离线期间新装的应用（用真实的 firstInstallTime，而不是"现在"）
         for (app in newList) {
             val pkg = app.getPackageName()
             if (pkg == context.packageName) continue
             if (!oldPackages.containsKey(pkg)) {
                 val installTime = app.getPackageInfo().firstInstallTime
-                if (installTime > 0 && !hasRecord(context, pkg, ChangeType.INSTALLED, installTime)) {
-                    addRecord(
-                        context,
+                val key = recordKey(pkg, ChangeType.INSTALLED, installTime)
+                if (installTime > 0 && existingKeys.add(key)) {
+                    newRecords.add(
                         AppChangeRecord(
                             packageName = pkg,
                             appName = app.getAppName(),
@@ -211,11 +235,9 @@ object AppChangeRepository {
                 val (oldVersionCode, oldUpdateTime, _) = oldPackages.getValue(pkg)
                 val newVersionCode = app.getPackageInfo().longVersionCode
                 val newUpdateTime = app.getPackageInfo().lastUpdateTime
-                if ((newVersionCode != oldVersionCode || newUpdateTime != oldUpdateTime) &&
-                    !hasRecord(context, pkg, ChangeType.UPDATED, newUpdateTime)
-                ) {
-                    addRecord(
-                        context,
+                val key = recordKey(pkg, ChangeType.UPDATED, newUpdateTime)
+                if ((newVersionCode != oldVersionCode || newUpdateTime != oldUpdateTime) && existingKeys.add(key)) {
+                    newRecords.add(
                         AppChangeRecord(
                             packageName = pkg,
                             appName = app.getAppName(),
@@ -235,9 +257,9 @@ object AppChangeRepository {
             if (pkg == context.packageName) continue
             if (!newPackageNames.contains(pkg)) {
                 val (_, _, appName) = info
-                if (!hasRecord(context, pkg, ChangeType.UNINSTALLED, discoveredAt)) {
-                    addRecord(
-                        context,
+                val key = recordKey(pkg, ChangeType.UNINSTALLED, discoveredAt)
+                if (existingKeys.add(key)) {
+                    newRecords.add(
                         AppChangeRecord(
                             packageName = pkg,
                             appName = appName,
@@ -249,6 +271,28 @@ object AppChangeRepository {
                 }
             }
         }
+
+        if (newRecords.isNotEmpty()) {
+            addRecordsBatch(context, existingRecords, newRecords)
+        }
+    }
+
+    /**
+     * 批量插入记录：只做一次读取（调用方已经读过了，这里直接复用）+ 一次排序 + 一次写入，
+     * 避免像单条 addRecord 那样每条都读写一遍磁盘。
+     */
+    private fun addRecordsBatch(
+        context: Context,
+        existingRecords: MutableList<AppChangeRecord>,
+        newRecords: List<AppChangeRecord>
+    ) {
+        existingRecords.addAll(0, newRecords)
+        // 最新的在前面
+        val sorted = existingRecords.sortedByDescending { it.timestamp }.toMutableList()
+        while (sorted.size > MAX_RECORDS) {
+            sorted.removeAt(sorted.size - 1)
+        }
+        saveRecords(context, sorted)
     }
 
     /**
