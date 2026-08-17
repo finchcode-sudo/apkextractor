@@ -27,6 +27,8 @@ android {
         multiDexEnabled = true
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        resValue("string", "app_name", "AppKit")
+
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
@@ -52,18 +54,6 @@ android {
             applicationIdSuffix = ".kit"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
-        }
-    }
-
-    flavorDimensions += "default"
-    productFlavors {
-        create("apkkit") {
-            dimension = "default"
-            resValue("string", "app_name", "牧歌App工具箱")
-        }
-        create("appshare") {
-            dimension = "default"
-            resValue("string", "app_name", "AppShare")
         }
     }
 
@@ -122,8 +112,7 @@ androidComponents {
                         fileType = ".APK"
                     }
                     
-                    val prefix = if (variant.name.contains("apkkit", ignoreCase = true)) "apkkit" else "appshare"
-                    val newName = "$prefix-${variant.outputs.first().versionName.get()}(${variant.outputs.first().versionCode.get()})${fileType}"
+                    val newName = "appkit-${variant.outputs.first().versionName.get()}(${variant.outputs.first().versionCode.get()})${fileType}"
                     output.outputFileName.set(newName)
                 }
             }
