@@ -72,12 +72,27 @@ object ApkSignatureUtil {
 
     // APK Signing Block 魔数
     private const val APK_SIGNING_BLOCK_MAGIC = "APK Sig Block 42"
-    private const val APK_SIGNING_BLOCK_MAGIC_SIZE = 16
 
     // 签名方案 ID (使用 Long 类型以支持超出 Int 范围的值)
     private const val SIGNATURE_SCHEME_V2_ID: Long = 0x7109871a
     private const val SIGNATURE_SCHEME_V3_ID: Long = 0xf05368c0L
     private const val SIGNATURE_SCHEME_V31_ID: Long = 0x1b93ad61
+
+    // ZIP / APK Signing Block 相关常量（参考 LibChecker 的 ApkSignatureSchemeDetector 实现）
+    private const val ZIP_EOCD_SIGNATURE = 0x06054b50
+    private const val ZIP_CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50
+    private const val ZIP_CENTRAL_DIRECTORY_HEADER_SIZE = 46
+    private const val ZIP_CENTRAL_DIRECTORY_FILE_NAME_LENGTH_OFFSET = 28
+    private const val ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET = 30
+    private const val ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET = 32
+    private const val ZIP_EOCD_MIN_SIZE = 22
+    private const val ZIP_EOCD_CENTRAL_DIR_SIZE_OFFSET = 12
+    private const val ZIP_EOCD_CENTRAL_DIR_OFFSET = 16
+    private const val ZIP_EOCD_COMMENT_LENGTH_OFFSET = 20
+    private const val ZIP_MAX_COMMENT_SIZE = 65535
+    private const val MAX_ZIP_CENTRAL_DIRECTORY_SIZE = 64L * 1024L * 1024L
+    private const val APK_SIGNING_BLOCK_FOOTER_SIZE = 24
+    private const val MAX_APK_SIGNING_BLOCK_SIZE = 32L * 1024L * 1024L
 
     /**
      * 获取完整的 APK 签名信息
@@ -124,149 +139,139 @@ object ApkSignatureUtil {
 
     /**
      * 检测 APK 使用的签名方案
+     * 算法参考 LibChecker 的 ApkSignatureSchemeDetector：
+     * 直接解析 ZIP Central Directory + APK Signing Block，避免用 JarFile 解析可能带来的异常，
+     * 并对 EOCD 位置做注释长度校验，避免在二进制数据中误判魔数。
      */
     fun detectSignatureSchemes(apkPath: String): Set<SignatureScheme> {
         val schemes = mutableSetOf<SignatureScheme>()
-
         try {
             val file = File(apkPath)
-            if (!file.exists()) return schemes
+            if (!file.exists() || !file.canRead()) return schemes
 
-            // v1 签名检测：检查 META-INF/*.SF/DSA/RSA 文件
-            if (hasV1Signature(apkPath)) {
-                schemes.add(SignatureScheme.V1)
+            RandomAccessFile(file, "r").use { raf ->
+                val centralDir = findCentralDirectory(raf) ?: return schemes
+
+                if (hasJarSignature(raf, centralDir)) {
+                    schemes.add(SignatureScheme.V1)
+                }
+
+                val blockIds = readApkSigningBlockIds(raf, centralDir.offset)
+                if (SIGNATURE_SCHEME_V2_ID.toInt() in blockIds) schemes.add(SignatureScheme.V2)
+                if (SIGNATURE_SCHEME_V3_ID.toInt() in blockIds) schemes.add(SignatureScheme.V3)
+                if (SIGNATURE_SCHEME_V31_ID.toInt() in blockIds) schemes.add(SignatureScheme.V31)
             }
 
-            // v2/v3 签名检测：检查 APK Signing Block
-            val signingBlockSchemes = detectSigningBlockSchemes(file)
-            schemes.addAll(signingBlockSchemes)
-
+            if (File("${file.absolutePath}.idsig").exists()) {
+                schemes.add(SignatureScheme.V4)
+            }
         } catch (e: Exception) {
             LogUtil.e("Error detecting signature schemes", e, TAG)
         }
-
         return schemes
     }
 
+    private data class ZipCentralDirectory(val offset: Long, val size: Long)
+
     /**
-     * 检测是否有 v1 签名
+     * 从文件末尾查找 EOCD (End Of Central Directory)，并校验注释长度与实际剩余字节数一致，
+     * 避免误将数据里偶然出现的魔数字节当成真正的 EOCD。
      */
-    private fun hasV1Signature(apkPath: String): Boolean {
-        return try {
-            JarFile(apkPath).use { jarFile ->
-                jarFile.entries().asSequence().any { entry ->
-                    val name = entry.name.uppercase()
-                    name.startsWith("META-INF/") &&
-                            (name.endsWith(".SF") || name.endsWith(".DSA") || name.endsWith(".RSA") || name.endsWith(".EC"))
-                }
+    private fun findCentralDirectory(raf: RandomAccessFile): ZipCentralDirectory? {
+        val fileLength = raf.length()
+        if (fileLength < ZIP_EOCD_MIN_SIZE) return null
+
+        val readSize = minOf(fileLength, (ZIP_EOCD_MIN_SIZE + ZIP_MAX_COMMENT_SIZE).toLong()).toInt()
+        val buffer = ByteArray(readSize)
+        raf.seek(fileLength - readSize)
+        raf.readFully(buffer)
+
+        for (offset in (readSize - ZIP_EOCD_MIN_SIZE) downTo 0) {
+            if (readIntLE(buffer, offset).toInt() == ZIP_EOCD_SIGNATURE &&
+                readUnsignedShortLE(buffer, offset + ZIP_EOCD_COMMENT_LENGTH_OFFSET) == readSize - offset - ZIP_EOCD_MIN_SIZE
+            ) {
+                return ZipCentralDirectory(
+                    offset = readUnsignedIntLE(buffer, offset + ZIP_EOCD_CENTRAL_DIR_OFFSET),
+                    size = readUnsignedIntLE(buffer, offset + ZIP_EOCD_CENTRAL_DIR_SIZE_OFFSET)
+                )
             }
-        } catch (e: Exception) {
-            LogUtil.e("Error checking v1 signature", e, TAG)
-            false
         }
+        return null
     }
 
     /**
-     * 检测 APK Signing Block 中的签名方案
+     * 检测是否存在 v1 (JAR) 签名：直接解析 Central Directory 记录，查找 META-INF/*.RSA|.DSA|.EC 条目
      */
-    private fun detectSigningBlockSchemes(file: File): Set<SignatureScheme> {
-        val schemes = mutableSetOf<SignatureScheme>()
+    private fun hasJarSignature(raf: RandomAccessFile, centralDirectory: ZipCentralDirectory): Boolean {
+        if (centralDirectory.size <= 0L || centralDirectory.size > MAX_ZIP_CENTRAL_DIRECTORY_SIZE) return false
 
-        try {
-            RandomAccessFile(file, "r").use { raf ->
-                // 查找 APK Signing Block
-                val signingBlockInfo = findApkSigningBlock(raf) ?: return schemes
-                val (blockOffset, blockSize) = signingBlockInfo
+        val header = ByteArray(ZIP_CENTRAL_DIRECTORY_HEADER_SIZE)
+        var remaining = centralDirectory.size
+        raf.seek(centralDirectory.offset)
+        while (remaining >= ZIP_CENTRAL_DIRECTORY_HEADER_SIZE) {
+            raf.readFully(header)
+            if (readIntLE(header, 0).toInt() != ZIP_CENTRAL_DIRECTORY_SIGNATURE) return false
 
-                // 读取 Signing Block 中的键值对
-                raf.seek(blockOffset)
-                val blockData = ByteArray(blockSize)
-                raf.readFully(blockData)
+            val fileNameLength = readUnsignedShortLE(header, ZIP_CENTRAL_DIRECTORY_FILE_NAME_LENGTH_OFFSET)
+            val extraLength = readUnsignedShortLE(header, ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET)
+            val commentLength = readUnsignedShortLE(header, ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET)
+            val entrySize = ZIP_CENTRAL_DIRECTORY_HEADER_SIZE + fileNameLength + extraLength + commentLength
+            if (entrySize > remaining) return false
 
-                // 解析键值对
-                var offset = 8 // 跳过 size 和 magic 前8字节
-                while (offset < blockData.size - APK_SIGNING_BLOCK_MAGIC_SIZE) {
-                    val pairSize = readIntLE(blockData, offset).toInt()
-                    if (pairSize <= 0 || offset + 4 + pairSize > blockData.size) break
-
-                    val pairId = readIntLE(blockData, offset + 4)
-
-                    when (pairId) {
-                        SIGNATURE_SCHEME_V2_ID -> schemes.add(SignatureScheme.V2)
-                        SIGNATURE_SCHEME_V3_ID -> schemes.add(SignatureScheme.V3)
-                        SIGNATURE_SCHEME_V31_ID -> schemes.add(SignatureScheme.V31)
-                    }
-
-                    offset += 4 + pairSize
-                }
+            val fileName = ByteArray(fileNameLength)
+            raf.readFully(fileName)
+            val name = String(fileName, Charsets.US_ASCII).uppercase()
+            if (name.startsWith("META-INF/") &&
+                (name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith(".EC"))
+            ) {
+                return true
             }
-        } catch (e: Exception) {
-            LogUtil.e("Error detecting signing block schemes", e, TAG)
-        }
 
-        return schemes
+            raf.seek(raf.filePointer + extraLength + commentLength)
+            remaining -= entrySize
+        }
+        return false
     }
 
     /**
-     * 查找 APK Signing Block 的位置
+     * 读取 APK Signing Block 中的签名方案 ID 集合
      */
-    private fun findApkSigningBlock(raf: RandomAccessFile): Pair<Long, Int>? {
-        try {
-            // 尝试查找 EOCD（End of Central Directory）
-            // EOCD 的大小至少是 22 字节。由于 ZIP 注释最长为 65535 字节，因此 EOCD 的起始位置
-            // 最多距离文件末尾 65557 字节。
-            val maxCommentSize = 65535
-            val minEocdSize = 22
-            val maxEocdDistance = maxCommentSize + minEocdSize
-            
-            val fileSize = raf.length()
-            val searchSize = if (fileSize < maxEocdDistance) fileSize.toInt() else maxEocdDistance
-            
-            val buffer = ByteArray(searchSize)
-            raf.seek(fileSize - searchSize)
-            raf.readFully(buffer)
-            
-            var eocdOffsetInFile = -1L
-            // 从后往前在内存中搜索 EOCD 魔数 (0x06054b50 的小端序列: 50 4b 05 06)
-            for (i in (searchSize - minEocdSize) downTo 0) {
-                if (buffer[i] == 0x50.toByte() && buffer[i+1] == 0x4b.toByte() &&
-                    buffer[i+2] == 0x05.toByte() && buffer[i+3] == 0x06.toByte()) {
-                    eocdOffsetInFile = fileSize - searchSize + i
-                    break
-                }
-            }
-            
-            if (eocdOffsetInFile < 0) return null
-            raf.seek(eocdOffsetInFile)
+    private fun readApkSigningBlockIds(raf: RandomAccessFile, centralDirOffset: Long): Set<Int> {
+        if (centralDirOffset < APK_SIGNING_BLOCK_FOOTER_SIZE) return emptySet()
 
-            // 读取 EOCD
-            raf.skipBytes(12) // 跳过不需要的字段
-            val cdOffset = raf.readInt().toLong() and 0xFFFFFFFFL
+        val footer = ByteArray(APK_SIGNING_BLOCK_FOOTER_SIZE)
+        raf.seek(centralDirOffset - APK_SIGNING_BLOCK_FOOTER_SIZE)
+        raf.readFully(footer)
 
-            // 检查是否有 APK Signing Block
-            if (cdOffset < 32) return null
+        val magic = footer.copyOfRange(8, 24)
+        if (!magic.contentEquals(APK_SIGNING_BLOCK_MAGIC.toByteArray())) return emptySet()
 
-            // 读取 Signing Block 大小
-            raf.seek(cdOffset - 24)
-            val blockSizeLow = raf.readInt().toLong() and 0xFFFFFFFFL
-            val blockSizeHigh = raf.readInt().toLong() and 0xFFFFFFFFL
-            val blockSize = blockSizeLow or (blockSizeHigh shl 32)
-
-            if (blockSize <= 0 || blockSize > cdOffset - 8) return null
-
-            // 验证魔数
-            raf.seek(cdOffset - 16)
-            val magic = ByteArray(16)
-            raf.readFully(magic)
-            if (!magic.contentEquals(APK_SIGNING_BLOCK_MAGIC.toByteArray())) return null
-
-            val blockOffset = cdOffset - blockSize - 8
-            return Pair(blockOffset, blockSize.toInt() + 8)
-
-        } catch (e: Exception) {
-            LogUtil.e("Error finding APK signing block", e, TAG)
-            return null
+        val blockSize = readLongLE(footer, 0)
+        val totalSize = blockSize + 8
+        if (blockSize < APK_SIGNING_BLOCK_FOOTER_SIZE ||
+            totalSize > centralDirOffset ||
+            totalSize > MAX_APK_SIGNING_BLOCK_SIZE
+        ) {
+            return emptySet()
         }
+
+        val block = ByteArray(totalSize.toInt())
+        raf.seek(centralDirOffset - totalSize)
+        raf.readFully(block)
+        if (readLongLE(block, 0) != blockSize) return emptySet()
+
+        val ids = mutableSetOf<Int>()
+        var offset = 8
+        val pairsEnd = block.size - APK_SIGNING_BLOCK_FOOTER_SIZE
+        while (offset < pairsEnd) {
+            if (offset + 8 > pairsEnd) break
+            val pairSize = readLongLE(block, offset)
+            offset += 8
+            if (pairSize < 4 || pairSize > (pairsEnd - offset).toLong()) break
+            ids += readIntLE(block, offset).toInt()
+            offset += pairSize.toInt()
+        }
+        return ids
     }
 
     /**
@@ -467,6 +472,31 @@ object ApkSignatureUtil {
                 ((data[offset + 1].toLong() and 0xFF) shl 8) or
                 ((data[offset + 2].toLong() and 0xFF) shl 16) or
                 ((data[offset + 3].toLong() and 0xFF) shl 24)
+    }
+
+    /**
+     * 小端序读取 unsigned short
+     */
+    private fun readUnsignedShortLE(data: ByteArray, offset: Int): Int {
+        return (data[offset].toInt() and 0xFF) or ((data[offset + 1].toInt() and 0xFF) shl 8)
+    }
+
+    /**
+     * 小端序读取 unsigned int，返回 Long
+     */
+    private fun readUnsignedIntLE(data: ByteArray, offset: Int): Long {
+        return readIntLE(data, offset) and 0xFFFFFFFFL
+    }
+
+    /**
+     * 小端序读取 long (8字节)
+     */
+    private fun readLongLE(data: ByteArray, offset: Int): Long {
+        var value = 0L
+        for (i in 0 until 8) {
+            value = value or ((data[offset + i].toLong() and 0xFFL) shl (8 * i))
+        }
+        return value
     }
 }
 
