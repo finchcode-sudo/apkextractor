@@ -90,12 +90,12 @@ fun FilterBottomSheet(
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = {
-                    appType = AppTypeFilter.USER
+                    appType = AppTypeFilter.ALL
                     sizeRange = SizeRange.ALL
                     selectedInstallers = emptySet()
                     onApply(
                         FilterConfig(
-                            appType = AppTypeFilter.USER,
+                            appType = AppTypeFilter.ALL,
                             sizeRange = SizeRange.ALL,
                             installerSources = emptySet()
                         )
