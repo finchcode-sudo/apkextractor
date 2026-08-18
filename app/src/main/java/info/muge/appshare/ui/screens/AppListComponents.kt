@@ -8,6 +8,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Apps
@@ -60,6 +63,8 @@ import info.muge.appshare.items.AppItem
 import info.muge.appshare.ui.theme.AppDimens
 import info.muge.appshare.utils.PermissionExts
 import info.muge.appshare.utils.AppIconModel
+import info.muge.appshare.utils.apiToColor
+import info.muge.appshare.utils.apiToVersion
 import java.util.Locale
 
 /**
@@ -488,15 +493,36 @@ internal fun LinearAppItem(
                     )
                 }
             } else {
-                Surface(
-                    shape = RoundedCornerShape(AppDimens.Radius.sm),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
+                val targetSdk = app.getPackageInfo().applicationInfo?.targetSdkVersion ?: 0
+                val apiColor = Color(targetSdk.apiToColor())
+                val apiDescription = targetSdk.apiToVersion()
+
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(AppDimens.Radius.sm))
+                        .background(apiColor.copy(alpha = 0.07f))
+                        .border(
+                            width = 1.dp,
+                            color = apiColor,
+                            shape = RoundedCornerShape(AppDimens.Radius.sm)
+                        )
+                        .padding(horizontal = AppDimens.Space.sm, vertical = AppDimens.Space.xs),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = Formatter.formatFileSize(LocalContext.current, app.getSize()),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = AppDimens.Space.md, vertical = AppDimens.Space.sm)
+                        text = targetSdk.toString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = apiColor
+                    )
+                    Text(
+                        text = apiDescription,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = apiColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
