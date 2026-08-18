@@ -133,12 +133,16 @@ class AppListViewModel : ViewModel() {
         _uiState.update { it.copy(hasPermission = hasPermission) }
     }
 
-    // 是否已经完成过一次“秒开”式的磁盘缓存加载，避免同一进程内重复读盘
+    // 是否已经完成过一次秒开式的磁盘缓存加载，避免同一进程内重复读盘
     private var quickLoadAttempted = false
+
+    // 全量图标预存回填（给几百个应用逐个取图标）只在本次进程真正需要做一次，
+    // 避免每次从详情页返回列表页都重新跑一遍，导致和其他写入操作抢同一把锁而卡住界面
+    private var iconBackfillDoneThisSession = false
 
     /**
      * 刷新应用列表
-     * @param isColdStart 是否为冷启动（进程首次进入该页面）。冷启动时会先尝试用磁盘缓存"秒开"，
+     * @param isColdStart 是否为冷启动（进程首次进入该页面）。冷启动时会先尝试用磁盘缓存秒开，
      *        再在后台做一次真正的全量刷新；非冷启动（比如设置变更后手动刷新）则直接全量刷新。
      */
     fun refreshAppList(context: Context, isColdStart: Boolean = false) {
@@ -149,7 +153,7 @@ class AppListViewModel : ViewModel() {
         refreshJob = viewModelScope.launch {
             val task = RefreshInstalledListTask(context)
 
-            // 冷启动时先记下"上一次扫描缓存"的快照，稍后用来对比出离线期间（App未运行时）
+            // 冷启动时先记下上一次扫描缓存的快照，稍后用来对比出离线期间（App未运行时）
             // 发生的安装/卸载/更新，补全变更记录——这份快照会在 task.execute() 结束时被新数据覆盖，
             // 所以必须在 execute() 之前先读出来。
             val oldCacheSnapshot: Map<String, Triple<Long, Long, String>> = if (isColdStart) {
@@ -174,8 +178,6 @@ class AppListViewModel : ViewModel() {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            // 注意：这里不设置 isRefreshing，避免触发下拉刷新的转圈图标；
-                            // 用专门的 isBackgroundSyncing 悄悄标记后台校验中，不打断用户浏览
                             isBackgroundSyncing = true,
                             appList = filtered,
                             groupedAppList = grouped
@@ -184,7 +186,13 @@ class AppListViewModel : ViewModel() {
                 }
             }
 
-            if (!quickLoaded) {
+            // 只有在"当前列表确实是空的"（真正首次进入）时，才展示全屏扫描进度；
+            // 如果已经有数据在显示了（比如从应用详情页返回），就不清空、不打断用户，
+            // 后台悄悄刷新，刷新完再无感替换数据即可
+            val hadDataBefore = _uiState.value.appList.isNotEmpty()
+            val showFullScanUi = !quickLoaded && !hadDataBefore
+
+            if (showFullScanUi) {
                 _uiState.update {
                     it.copy(
                         isLoading = true,
@@ -194,27 +202,36 @@ class AppListViewModel : ViewModel() {
                         groupedAppList = emptyMap()
                     )
                 }
+            } else if (!quickLoaded && hadDataBefore) {
+                _uiState.update { it.copy(isBackgroundSyncing = true) }
             }
 
             val appList = task.execute(
                 onProgressStarted = { total ->
-                    if (!quickLoaded) {
+                    if (showFullScanUi) {
                         _uiState.update { it.copy(loadingTotal = total) }
                     }
                 },
                 onProgressUpdated = { current, total ->
-                    if (!quickLoaded) {
+                    if (showFullScanUi) {
                         _uiState.update { it.copy(loadingCurrent = current, loadingTotal = total) }
                     }
                 }
             )
 
             // 补全应用变更记录：
-            // 1) 用系统记住的 firstInstallTime/lastUpdateTime 回填"当前已安装应用"的历史（幂等，可重复调用）
-            // 2) 对比上一次缓存快照，补上离线期间发生的安装/卸载/更新
+            // 1) 用系统记住的 firstInstallTime/lastUpdateTime 回填当前已安装应用的历史（幂等，可重复调用）。
+            //    这一步要给几百个应用逐个取图标缓存，比较耗时，整个App进程生命周期内只需要真正跑一次，
+            //    避免每次从详情页返回列表页都重新触发，导致和其他写入操作抢锁把界面卡住。
+            // 2) 对比上一次缓存快照，补上离线期间发生的安装/卸载/更新（这个比较轻量，每次都可以做）
+            // 注意：这两个操作涉及磁盘IO，必须丢到 IO 线程执行，
+            // 否则会阻塞主线程导致触摸事件处理不过来，触发 ANR
             if (isColdStart) {
                 withContext(Dispatchers.IO) {
-                    AppChangeRepository.backfillFromInstalledPackages(context)
+                    if (!iconBackfillDoneThisSession) {
+                        iconBackfillDoneThisSession = true
+                        AppChangeRepository.backfillFromInstalledPackages(context)
+                    }
                     AppChangeRepository.diffAndRecordOfflineChanges(context, oldCacheSnapshot, appList)
                 }
             }
