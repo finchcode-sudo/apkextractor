@@ -55,19 +55,19 @@ enum class SizeRange(val label: String, val minBytes: Long, val maxBytes: Long) 
  * 筛选配置
  */
 data class FilterConfig(
-    val appType: AppTypeFilter = AppTypeFilter.ALL,
+    val appType: AppTypeFilter = AppTypeFilter.USER,
     val sizeRange: SizeRange = SizeRange.ALL,
     val installerSources: Set<String> = emptySet()
 ) {
     val isActive: Boolean
-        get() = appType != AppTypeFilter.ALL ||
+        get() = appType != AppTypeFilter.USER ||
                 sizeRange != SizeRange.ALL ||
                 installerSources.isNotEmpty()
 
     val activeCount: Int
         get() {
             var count = 0
-            if (appType != AppTypeFilter.ALL) count++
+            if (appType != AppTypeFilter.USER) count++
             if (sizeRange != SizeRange.ALL) count++
             if (installerSources.isNotEmpty()) count++
             return count
@@ -356,9 +356,9 @@ class AppListViewModel : ViewModel() {
     private fun loadSavedFilterConfig(context: Context): FilterConfig {
         val settings = SPUtil.getGlobalSharedPreferences(context)
         val appType = try {
-            AppTypeFilter.valueOf(settings.getString(Constants.PREFERENCE_FILTER_APP_TYPE, null) ?: "ALL")
+            AppTypeFilter.valueOf(settings.getString(Constants.PREFERENCE_FILTER_APP_TYPE, null) ?: "USER")
         } catch (_: Exception) {
-            AppTypeFilter.ALL
+            AppTypeFilter.USER
         }
         val sizeRange = try {
             SizeRange.valueOf(settings.getString(Constants.PREFERENCE_FILTER_SIZE_RANGE, null) ?: "ALL")
