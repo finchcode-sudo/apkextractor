@@ -85,7 +85,6 @@ import info.muge.appshare.ui.dialogs.AppBottomSheet
 import info.muge.appshare.ui.screens.appdetail.AppInfoContent
 import info.muge.appshare.ui.screens.appdetail.ComponentListContent
 import info.muge.appshare.ui.screens.appdetail.ComponentType
-import info.muge.appshare.ui.screens.appdetail.HashContent
 import info.muge.appshare.ui.screens.appdetail.ManifestContent
 import info.muge.appshare.ui.screens.appdetail.SignatureContent
 import info.muge.appshare.ui.screens.appdetail.SoLibContent
@@ -154,7 +153,6 @@ fun AppDetailScreen(
     val tabs = listOf(
         stringResource(R.string.tab_app_info),
         stringResource(R.string.tab_signature),
-        stringResource(R.string.tab_hash),
         stringResource(R.string.tab_permissions),
         stringResource(R.string.tab_activities),
         stringResource(R.string.tab_services),
@@ -385,15 +383,14 @@ fun AppDetailScreen(
                     when (page) {
                         0 -> AppInfoContent(item)
                         1 -> SignatureContent(item)
-                        2 -> HashContent(item)
-                        3 -> ComponentListContent(context, item, ComponentType.PERMISSION)
-                        4 -> ComponentListContent(context, item, ComponentType.ACTIVITY)
-                        5 -> ComponentListContent(context, item, ComponentType.SERVICE)
-                        6 -> ComponentListContent(context, item, ComponentType.RECEIVER)
-                        7 -> ComponentListContent(context, item, ComponentType.PROVIDER)
-                        8 -> ComponentListContent(context, item, ComponentType.STATIC_LOADER)
-                        9 -> SoLibContent(item)
-                        10 -> ManifestContent(item)
+                        2 -> ComponentListContent(context, item, ComponentType.PERMISSION)
+                        3 -> ComponentListContent(context, item, ComponentType.ACTIVITY)
+                        4 -> ComponentListContent(context, item, ComponentType.SERVICE)
+                        5 -> ComponentListContent(context, item, ComponentType.RECEIVER)
+                        6 -> ComponentListContent(context, item, ComponentType.PROVIDER)
+                        7 -> ComponentListContent(context, item, ComponentType.STATIC_LOADER)
+                        8 -> SoLibContent(item)
+                        9 -> ManifestContent(item)
                     }
                 }
             }

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import info.muge.appshare.R
 import info.muge.appshare.items.AppItem
+import info.muge.appshare.tasks.HashTask
 import info.muge.appshare.ui.theme.AppDimens
 import info.muge.appshare.utils.ApkSignatureInfo
 import info.muge.appshare.utils.ApkSignatureUtil
@@ -55,6 +56,7 @@ data class SignatureInfo(
     val md5: String = "",
     val sha1: String = "",
     val sha256: String = "",
+    val crc32: String = "",
     val certHex: String = "",
     val signatureSchemes: Set<SignatureScheme> = emptySet()
 )
@@ -80,6 +82,13 @@ fun SignatureContent(appItem: AppItem) {
                 // 兼容原有格式
                 val signInfos = EnvironmentUtil.getAPKSignInfo(sourceDir)
 
+                // CRC32 是整个 APK 文件的校验和（沿用原"哈希"页面的计算方式）
+                val crc32Value = try {
+                    HashTask(appItem.getFileItem(), HashTask.HashType.CRC32).execute()
+                } catch (e: Exception) {
+                    ""
+                }
+
                 SignatureInfo(
                     subject = fullInfo.subject.ifEmpty { signInfos.getOrElse(0) { "" } },
                     issuer = fullInfo.issuer.ifEmpty { signInfos.getOrElse(1) { "" } },
@@ -96,6 +105,7 @@ fun SignatureContent(appItem: AppItem) {
                     md5 = fullInfo.md5.ifEmpty { EnvironmentUtil.getSignatureMD5StringOfPackageInfo(packageInfo) },
                     sha1 = fullInfo.sha1.ifEmpty { EnvironmentUtil.getSignatureSHA1OfPackageInfo(packageInfo) },
                     sha256 = fullInfo.sha256.ifEmpty { EnvironmentUtil.getSignatureSHA256OfPackageInfo(packageInfo) },
+                    crc32 = crc32Value,
                     certHex = fullInfo.certHex,
                     signatureSchemes = fullInfo.signatureSchemes
                 )
@@ -213,6 +223,11 @@ fun SignatureContent(appItem: AppItem) {
                     label = stringResource(R.string.activity_detail_signature_sha256),
                     value = info.sha256,
                     onClick = { copyToClipboard(context, info.sha256) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_crc32),
+                    value = info.crc32,
+                    onClick = { copyToClipboard(context, info.crc32) }
                 )
                 SignatureItem(
                     label = stringResource(R.string.activity_detail_signature_cert_hex),
