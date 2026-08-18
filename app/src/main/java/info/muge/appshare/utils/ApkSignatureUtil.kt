@@ -25,6 +25,15 @@ data class ApkSignatureInfo(
     val serialNumber: String = "",
     val notBefore: Date? = null,
     val notAfter: Date? = null,
+    // 公钥信息
+    val publicKeyFormat: String = "",
+    val publicKeyAlgorithm: String = "",
+    val publicKeyExponent: String = "",
+    val modulusSize: String = "",
+    val modulus: String = "",
+    // 签名算法信息
+    val signatureAlgorithm: String = "",
+    val signatureAlgorithmOID: String = "",
     // 指纹
     val md5: String = "",
     val sha1: String = "",
@@ -85,6 +94,13 @@ object ApkSignatureUtil {
                 serialNumber = certInfo.third,
                 notBefore = certInfo.fourth,
                 notAfter = certInfo.fifth,
+                publicKeyFormat = certInfo.sixth,
+                publicKeyAlgorithm = certInfo.seventh,
+                publicKeyExponent = certInfo.eighth,
+                modulusSize = certInfo.ninth,
+                modulus = certInfo.tenth,
+                signatureAlgorithm = certInfo.eleventh,
+                signatureAlgorithmOID = certInfo.twelfth,
                 md5 = fingerprints.first,
                 sha1 = fingerprints.second,
                 sha256 = fingerprints.third,
@@ -249,12 +265,19 @@ object ApkSignatureUtil {
     /**
      * 从 APK 文件获取证书信息
      */
-    private fun getCertificateInfo(apkPath: String): Quintuple<String, String, String, Date?, Date?> {
+    private fun getCertificateInfo(apkPath: String): CertInfo {
         var subject = ""
         var issuer = ""
         var serial = ""
         var notBefore: Date? = null
         var notAfter: Date? = null
+        var pubKeyFormat = ""
+        var pubKeyAlgorithm = ""
+        var pubKeyExponent = ""
+        var modulusSize = ""
+        var modulus = ""
+        var sigAlgorithm = ""
+        var sigAlgorithmOID = ""
 
         try {
             JarFile(apkPath).use { jarFile ->
@@ -272,6 +295,17 @@ object ApkSignatureUtil {
                         serial = x509cert.serialNumber.toString()
                         notBefore = x509cert.notBefore
                         notAfter = x509cert.notAfter
+                        sigAlgorithm = x509cert.sigAlgName ?: ""
+                        sigAlgorithmOID = x509cert.sigAlgOID ?: ""
+
+                        val publicKey = x509cert.publicKey
+                        pubKeyFormat = publicKey.format ?: ""
+                        pubKeyAlgorithm = publicKey.algorithm ?: ""
+                        if (publicKey is java.security.interfaces.RSAPublicKey) {
+                            pubKeyExponent = publicKey.publicExponent.toString()
+                            modulusSize = "${publicKey.modulus.bitLength()} bit"
+                            modulus = publicKey.modulus.toString(16)
+                        }
                     }
                 }
             }
@@ -279,7 +313,11 @@ object ApkSignatureUtil {
             LogUtil.e("Error getting certificate info", e, TAG)
         }
 
-        return Quintuple(subject, issuer, serial, notBefore, notAfter)
+        return CertInfo(
+            subject, issuer, serial, notBefore, notAfter,
+            pubKeyFormat, pubKeyAlgorithm, pubKeyExponent, modulusSize, modulus,
+            sigAlgorithm, sigAlgorithmOID
+        )
     }
 
     /**
@@ -366,12 +404,19 @@ object ApkSignatureUtil {
 }
 
 /**
- * 五元组辅助类
+ * 证书信息辅助类
  */
-private data class Quintuple<A, B, C, D, E>(
-    val first: A,
-    val second: B,
-    val third: C,
-    val fourth: D,
-    val fifth: E
+private data class CertInfo(
+    val first: String,      // subject
+    val second: String,     // issuer
+    val third: String,      // serial
+    val fourth: Date?,      // notBefore
+    val fifth: Date?,       // notAfter
+    val sixth: String,      // publicKeyFormat
+    val seventh: String,    // publicKeyAlgorithm
+    val eighth: String,     // publicKeyExponent
+    val ninth: String,      // modulusSize
+    val tenth: String,      // modulus
+    val eleventh: String,   // signatureAlgorithm
+    val twelfth: String     // signatureAlgorithmOID
 )

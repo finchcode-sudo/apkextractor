@@ -45,6 +45,13 @@ data class SignatureInfo(
     val serial: String = "",
     val notBefore: String = "",
     val notAfter: String = "",
+    val publicKeyFormat: String = "",
+    val publicKeyAlgorithm: String = "",
+    val publicKeyExponent: String = "",
+    val modulusSize: String = "",
+    val modulus: String = "",
+    val signatureAlgorithm: String = "",
+    val signatureAlgorithmOID: String = "",
     val md5: String = "",
     val sha1: String = "",
     val sha256: String = "",
@@ -78,6 +85,13 @@ fun SignatureContent(appItem: AppItem) {
                     serial = fullInfo.serialNumber.ifEmpty { signInfos.getOrElse(2) { "" } },
                     notBefore = fullInfo.notBefore?.toString() ?: signInfos.getOrElse(3) { "" },
                     notAfter = fullInfo.notAfter?.toString() ?: signInfos.getOrElse(4) { "" },
+                    publicKeyFormat = fullInfo.publicKeyFormat,
+                    publicKeyAlgorithm = fullInfo.publicKeyAlgorithm,
+                    publicKeyExponent = fullInfo.publicKeyExponent,
+                    modulusSize = fullInfo.modulusSize,
+                    modulus = fullInfo.modulus,
+                    signatureAlgorithm = fullInfo.signatureAlgorithm,
+                    signatureAlgorithmOID = fullInfo.signatureAlgorithmOID,
                     md5 = fullInfo.md5.ifEmpty { EnvironmentUtil.getSignatureMD5StringOfPackageInfo(packageInfo) },
                     sha1 = fullInfo.sha1.ifEmpty { EnvironmentUtil.getSignatureSHA1OfPackageInfo(packageInfo) },
                     sha256 = fullInfo.sha256.ifEmpty { EnvironmentUtil.getSignatureSHA256OfPackageInfo(packageInfo) },
@@ -147,6 +161,41 @@ fun SignatureContent(appItem: AppItem) {
                     label = stringResource(R.string.activity_detail_signature_end),
                     value = info.notAfter,
                     onClick = { copyToClipboard(context, info.notAfter) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_pubkey_format),
+                    value = info.publicKeyFormat,
+                    onClick = { copyToClipboard(context, info.publicKeyFormat) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_pubkey_algorithm),
+                    value = info.publicKeyAlgorithm,
+                    onClick = { copyToClipboard(context, info.publicKeyAlgorithm) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_pubkey_exponent),
+                    value = info.publicKeyExponent,
+                    onClick = { copyToClipboard(context, info.publicKeyExponent) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_modulus_size),
+                    value = info.modulusSize,
+                    onClick = { copyToClipboard(context, info.modulusSize) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_modulus),
+                    value = info.modulus,
+                    onClick = { copyToClipboard(context, info.modulus) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_sigalg),
+                    value = info.signatureAlgorithm,
+                    onClick = { copyToClipboard(context, info.signatureAlgorithm) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_sigalg_oid),
+                    value = info.signatureAlgorithmOID,
+                    onClick = { copyToClipboard(context, info.signatureAlgorithmOID) }
                 )
                 SignatureItem(
                     label = stringResource(R.string.activity_detail_signature_md5),

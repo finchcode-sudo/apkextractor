@@ -61,6 +61,13 @@
     <string name="activity_detail_signature_serial">Serial number</string>
     <string name="activity_detail_signature_start">Start time</string>
     <string name="activity_detail_signature_end">End time</string>
+    <string name="activity_detail_signature_pubkey_format">Public key format</string>
+    <string name="activity_detail_signature_pubkey_algorithm">Public key algorithm</string>
+    <string name="activity_detail_signature_pubkey_exponent">Public key exponent</string>
+    <string name="activity_detail_signature_modulus_size">Modulus size</string>
+    <string name="activity_detail_signature_modulus">Modulus</string>
+    <string name="activity_detail_signature_sigalg">Signature algorithm</string>
+    <string name="activity_detail_signature_sigalg_oid">Signature algorithm OID</string>
     <string name="activity_detail_signature_md5">MD5</string>
     <string name="activity_detail_signature_sha1">SHA1</string>
     <string name="activity_detail_signature_sha256">SHA256</string>
