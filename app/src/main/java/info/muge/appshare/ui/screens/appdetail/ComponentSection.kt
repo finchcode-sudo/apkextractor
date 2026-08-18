@@ -281,8 +281,8 @@ data class ComponentItem(
     val permissionFlags: String? = null,
     val permissionDefiningPackage: String? = null,
     val permissionGroup: String? = null,
-    // root 相关：该权限对应的 AppOps op 数字编号（没有则为 null），以及当前是否已授权
-    val permissionOpName: Int? = null,
+    // root 相关：该权限对应的 AppOps op 名称（没有则为 null），以及当前是否已授权
+    val permissionOpName: String? = null,
     val permissionGranted: Boolean = false
 )
 
