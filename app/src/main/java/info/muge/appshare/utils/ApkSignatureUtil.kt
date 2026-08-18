@@ -85,7 +85,11 @@ object ApkSignatureUtil {
     fun getFullSignatureInfo(apkPath: String, packageInfo: PackageInfo? = null): ApkSignatureInfo {
         return try {
             val schemes = detectSignatureSchemes(apkPath)
-            val certInfo = getCertificateInfo(apkPath)
+            // 优先从 PackageInfo 的签名字节解析证书（对仅 v2/v3 签名、无 v1 的 APK 依然有效）
+            var certInfo = packageInfo?.let { getCertificateInfoFromPackageInfo(it) }
+            if (certInfo == null || certInfo.first.isEmpty()) {
+                certInfo = getCertificateInfo(apkPath)
+            }
             val fingerprints = packageInfo?.let { getSignatureFingerprints(it) }
                 ?: getSignatureFingerprintsFromApk(apkPath)
 
@@ -266,6 +270,67 @@ object ApkSignatureUtil {
     }
 
     /**
+     * 从 PackageInfo 的签名字节解析证书信息
+     * 不依赖 v1(JAR) 签名，对仅使用 v2/v3 签名的 APK（如大多数 Google Play 应用）同样有效
+     */
+    private fun getCertificateInfoFromPackageInfo(packageInfo: PackageInfo): CertInfo? {
+        return try {
+            val signatures: Array<out Signature>? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.signingInfo?.apkContentsSigners
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.signatures
+            }
+
+            val signatureBytes = signatures?.firstOrNull()?.toByteArray() ?: return null
+            val certFactory = java.security.cert.CertificateFactory.getInstance("X.509")
+            val x509cert = certFactory.generateCertificate(
+                java.io.ByteArrayInputStream(signatureBytes)
+            ) as X509Certificate
+
+            buildCertInfo(x509cert)
+        } catch (e: Exception) {
+            LogUtil.e("Error getting certificate info from PackageInfo", e, TAG)
+            null
+        }
+    }
+
+    /**
+     * 从 X509Certificate 提取展示用的证书信息
+     */
+    private fun buildCertInfo(x509cert: X509Certificate): CertInfo {
+        val subject = x509cert.subjectDN.toString()
+        val issuer = x509cert.issuerDN.toString()
+        val serial = x509cert.serialNumber.toString()
+        val notBefore = x509cert.notBefore
+        val notAfter = x509cert.notAfter
+        val sigAlgorithm = x509cert.sigAlgName ?: ""
+        val sigAlgorithmOID = x509cert.sigAlgOID ?: ""
+
+        var pubKeyExponent = ""
+        var modulusSize = ""
+        var modulus = ""
+        val publicKey = x509cert.publicKey
+        val pubKeyFormat = publicKey.format ?: ""
+        val pubKeyAlgorithm = publicKey.algorithm ?: ""
+        if (publicKey is java.security.interfaces.RSAPublicKey) {
+            pubKeyExponent = publicKey.publicExponent.toString()
+            modulusSize = "${publicKey.modulus.bitLength()} bit"
+            modulus = publicKey.modulus.toString(16)
+        }
+
+        val certHex = x509cert.encoded.joinToString("") { byte ->
+            "%02x".format(byte)
+        }
+
+        return CertInfo(
+            subject, issuer, serial, notBefore, notAfter,
+            pubKeyFormat, pubKeyAlgorithm, pubKeyExponent, modulusSize, modulus,
+            sigAlgorithm, sigAlgorithmOID, certHex
+        )
+    }
+
+    /**
      * 从 APK 文件获取证书信息
      */
     private fun getCertificateInfo(apkPath: String): CertInfo {
@@ -294,26 +359,20 @@ object ApkSignatureUtil {
                     val certs = jarEntry.certificates
                     if (!certs.isNullOrEmpty()) {
                         val x509cert = certs[0] as X509Certificate
-                        subject = x509cert.subjectDN.toString()
-                        issuer = x509cert.issuerDN.toString()
-                        serial = x509cert.serialNumber.toString()
-                        notBefore = x509cert.notBefore
-                        notAfter = x509cert.notAfter
-                        sigAlgorithm = x509cert.sigAlgName ?: ""
-                        sigAlgorithmOID = x509cert.sigAlgOID ?: ""
-
-                        val publicKey = x509cert.publicKey
-                        pubKeyFormat = publicKey.format ?: ""
-                        pubKeyAlgorithm = publicKey.algorithm ?: ""
-                        if (publicKey is java.security.interfaces.RSAPublicKey) {
-                            pubKeyExponent = publicKey.publicExponent.toString()
-                            modulusSize = "${publicKey.modulus.bitLength()} bit"
-                            modulus = publicKey.modulus.toString(16)
-                        }
-
-                        certHex = x509cert.encoded.joinToString("") { byte ->
-                            "%02x".format(byte)
-                        }
+                        val info = buildCertInfo(x509cert)
+                        subject = info.first
+                        issuer = info.second
+                        serial = info.third
+                        notBefore = info.fourth
+                        notAfter = info.fifth
+                        pubKeyFormat = info.sixth
+                        pubKeyAlgorithm = info.seventh
+                        pubKeyExponent = info.eighth
+                        modulusSize = info.ninth
+                        modulus = info.tenth
+                        sigAlgorithm = info.eleventh
+                        sigAlgorithmOID = info.twelfth
+                        certHex = info.thirteenth
                     }
                 }
             }
