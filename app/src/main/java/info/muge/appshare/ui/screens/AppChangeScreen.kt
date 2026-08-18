@@ -396,7 +396,7 @@ private fun AppChangeDetailSheet(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (isInstalled) first.packageName else "未安装",
+                        text = first.packageName,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isInstalled) {
                             MaterialTheme.colorScheme.onSurfaceVariant
