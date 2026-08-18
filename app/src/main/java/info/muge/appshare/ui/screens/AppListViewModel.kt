@@ -141,6 +141,9 @@ class AppListViewModel : ViewModel() {
     // 避免每次从详情页返回列表页都重新跑一遍，导致和其他写入操作抢同一把锁而卡住界面
     private var iconBackfillDoneThisSession = false
 
+    private var lastOfflineCatchupAtMs = 0L
+    private val offlineCatchupThrottleMs = 10_000L
+
     /**
      * 刷新应用列表
      * @param isColdStart 是否为冷启动（进程首次进入该页面）。冷启动时会先尝试用磁盘缓存秒开，
@@ -148,6 +151,14 @@ class AppListViewModel : ViewModel() {
      */
     fun refreshAppList(context: Context, isColdStart: Boolean = false) {
         if (!_uiState.value.hasPermission) return
+
+        if (isColdStart &&
+            _uiState.value.appList.isNotEmpty() &&
+            System.currentTimeMillis() - lastOfflineCatchupAtMs < offlineCatchupThrottleMs
+        ) {
+            return
+        }
+        lastOfflineCatchupAtMs = System.currentTimeMillis()
 
         refreshJob?.cancel()
 
