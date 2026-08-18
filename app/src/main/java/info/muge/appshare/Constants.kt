@@ -70,6 +70,11 @@ object Constants {
     const val PREFERENCE_SHOW_SYSTEM_APP = "show_system_app"
     const val PREFERENCE_SHOW_SYSTEM_APP_DEFAULT = true
 
+    // 应用列表筛选条件持久化（进程被杀重启后恢复用）
+    const val PREFERENCE_FILTER_APP_TYPE = "filter_app_type"
+    const val PREFERENCE_FILTER_SIZE_RANGE = "filter_size_range"
+    const val PREFERENCE_FILTER_INSTALLERS = "filter_installers"
+
     /**
      * stands for a boolean value
      */

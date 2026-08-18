@@ -82,6 +82,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -121,6 +122,7 @@ fun MainScreen(
     onNavigateToThemeSettings: () -> Unit = {},
     appListViewModel: AppListViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     var currentTab by rememberSaveable { mutableIntStateOf(0) }
     var isSearchMode by rememberSaveable { mutableStateOf(false) }
     var searchText by rememberSaveable { mutableStateOf("") }
@@ -178,7 +180,7 @@ fun MainScreen(
             currentConfig = appListState.filterConfig,
             availableInstallers = appListState.availableInstallers,
             onApply = { config ->
-                appListViewModel.updateFilter(config)
+                appListViewModel.updateFilter(context, config)
                 showFilterSheet = false
             },
             onDismiss = { showFilterSheet = false }

@@ -130,7 +130,8 @@ class AppListViewModel : ViewModel() {
     fun initPermission(context: Context) {
         val hasPermission = SPUtil.getGlobalSharedPreferences(context)
             .getBoolean("show_app", false)
-        _uiState.update { it.copy(hasPermission = hasPermission) }
+        val savedFilter = loadSavedFilterConfig(context)
+        _uiState.update { it.copy(hasPermission = hasPermission, filterConfig = savedFilter) }
     }
 
     // 是否已经完成过一次秒开式的磁盘缓存加载，避免同一进程内重复读盘
@@ -313,7 +314,7 @@ class AppListViewModel : ViewModel() {
     /**
      * 更新筛选配置
      */
-    fun updateFilter(filterConfig: FilterConfig) {
+    fun updateFilter(context: Context, filterConfig: FilterConfig) {
         val source = Global.app_list.toList()
         val filtered = applyFilter(source, filterConfig)
         val grouped = applyGroup(filtered, _uiState.value.groupMode)
@@ -325,13 +326,42 @@ class AppListViewModel : ViewModel() {
                 groupedAppList = grouped
             )
         }
+        saveFilterConfig(context, filterConfig)
+    }
+
+    private fun saveFilterConfig(context: Context, filterConfig: FilterConfig) {
+        SPUtil.getGlobalSharedPreferences(context).edit()
+            .putString(Constants.PREFERENCE_FILTER_APP_TYPE, filterConfig.appType.name)
+            .putString(Constants.PREFERENCE_FILTER_SIZE_RANGE, filterConfig.sizeRange.name)
+            .putString(Constants.PREFERENCE_FILTER_INSTALLERS, filterConfig.installerSources.joinToString("\u0001"))
+            .apply()
+    }
+
+    private fun loadSavedFilterConfig(context: Context): FilterConfig {
+        val settings = SPUtil.getGlobalSharedPreferences(context)
+        val appType = try {
+            AppTypeFilter.valueOf(settings.getString(Constants.PREFERENCE_FILTER_APP_TYPE, null) ?: "ALL")
+        } catch (_: Exception) {
+            AppTypeFilter.ALL
+        }
+        val sizeRange = try {
+            SizeRange.valueOf(settings.getString(Constants.PREFERENCE_FILTER_SIZE_RANGE, null) ?: "ALL")
+        } catch (_: Exception) {
+            SizeRange.ALL
+        }
+        val installers = settings.getString(Constants.PREFERENCE_FILTER_INSTALLERS, null)
+            ?.split("\u0001")
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            ?: emptySet()
+        return FilterConfig(appType = appType, sizeRange = sizeRange, installerSources = installers)
     }
 
     /**
      * 重置筛选
      */
-    fun resetFilter() {
-        updateFilter(FilterConfig())
+    fun resetFilter(context: Context) {
+        updateFilter(context, FilterConfig())
     }
 
     /**
