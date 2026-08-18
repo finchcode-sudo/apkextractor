@@ -1,6 +1,7 @@
 package info.muge.appshare.ui.screens.appdetail
 
 import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -137,6 +138,18 @@ fun AppInfoContent(appItem: AppItem) {
                 label = stringResource(R.string.activity_detail_data_dir),
                 value = appInfo?.dataDir ?: "-",
                 onClick = { copyToClipboard(context, appInfo?.dataDir) }
+            )
+
+            // 受设备保护的数据目录
+            val deviceProtectedDataDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                appInfo?.deviceProtectedDataDir
+            } else {
+                null
+            }
+            InfoItemVertical(
+                label = stringResource(R.string.activity_detail_dev_protected_data_dir),
+                value = deviceProtectedDataDir ?: "-",
+                onClick = { copyToClipboard(context, deviceProtectedDataDir) }
             )
 
             // Native库目录
