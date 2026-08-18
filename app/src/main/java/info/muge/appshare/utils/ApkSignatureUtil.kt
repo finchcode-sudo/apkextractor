@@ -200,7 +200,7 @@ object ApkSignatureUtil {
     }
 
     /**
-     * 检测是否存在 v1 (JAR) 签名：直接解析 Central Directory 记录，查找 META-INF/*.RSA|.DSA|.EC 条目
+     * 检测是否存在 v1 (JAR) 签名：直接解析 Central Directory 记录，查找 META-INF 目录下 .RSA / .DSA / .EC 文件
      */
     private fun hasJarSignature(raf: RandomAccessFile, centralDirectory: ZipCentralDirectory): Boolean {
         if (centralDirectory.size <= 0L || centralDirectory.size > MAX_ZIP_CENTRAL_DIRECTORY_SIZE) return false
