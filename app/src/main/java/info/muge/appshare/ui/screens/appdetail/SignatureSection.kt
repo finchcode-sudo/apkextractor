@@ -141,13 +141,13 @@ fun SignatureContent(appItem: AppItem) {
             DetailCard {
                 SignatureItem(
                     label = stringResource(R.string.activity_detail_signature_issuer),
-                    value = info.subject,
-                    onClick = { copyToClipboard(context, info.subject) }
+                    value = info.issuer,
+                    onClick = { copyToClipboard(context, info.issuer) }
                 )
                 SignatureItem(
                     label = stringResource(R.string.activity_detail_signature_subject),
-                    value = info.issuer,
-                    onClick = { copyToClipboard(context, info.issuer) }
+                    value = info.subject,
+                    onClick = { copyToClipboard(context, info.subject) }
                 )
                 SignatureItem(
                     label = stringResource(R.string.activity_detail_signature_serial),
