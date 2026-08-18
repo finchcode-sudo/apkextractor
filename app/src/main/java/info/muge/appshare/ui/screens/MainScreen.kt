@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
@@ -217,25 +218,38 @@ fun MainScreen(
                 enter = fadeIn(tween(200)),
                 exit = fadeOut(tween(200))
             ) {
-                MainTopBar(
-                    title = when (currentTab) {
-                        0 -> stringResource(R.string.app_name)
-                        1 -> stringResource(R.string.nav_statistics)
-                        2 -> stringResource(R.string.action_settings)
-                        else -> stringResource(R.string.app_name)
-                    },
-                    showSearch = currentTab == 0,
-                    showMenu = currentTab == 0,
-                    viewMode = viewMode,
-                    activeFilterCount = appListState.filterConfig.activeCount,
-                    groupMode = appListState.groupMode,
-                    onSearchClick = { isSearchMode = true },
-                    onFilterClick = { showFilterSheet = true },
-                    onGroupClick = { showGroupDialog = true },
-                    onSortClick = { showSortDialog = true },
-                    onViewModeClick = { viewMode = if (viewMode == 0) 1 else 0 },
-                    scrollBehavior = scrollBehavior
-                )
+                if (currentTab == 0) {
+                    AppListHeaderCard(
+                        appCount = appListState.appList.size,
+                        viewMode = viewMode,
+                        activeFilterCount = appListState.filterConfig.activeCount,
+                        groupMode = appListState.groupMode,
+                        onSearchClick = { isSearchMode = true },
+                        onFilterClick = { showFilterSheet = true },
+                        onGroupClick = { showGroupDialog = true },
+                        onSortClick = { showSortDialog = true },
+                        onViewModeClick = { viewMode = if (viewMode == 0) 1 else 0 }
+                    )
+                } else {
+                    MainTopBar(
+                        title = when (currentTab) {
+                            1 -> stringResource(R.string.nav_statistics)
+                            2 -> stringResource(R.string.action_settings)
+                            else -> stringResource(R.string.app_name)
+                        },
+                        showSearch = false,
+                        showMenu = false,
+                        viewMode = viewMode,
+                        activeFilterCount = appListState.filterConfig.activeCount,
+                        groupMode = appListState.groupMode,
+                        onSearchClick = { isSearchMode = true },
+                        onFilterClick = { showFilterSheet = true },
+                        onGroupClick = { showGroupDialog = true },
+                        onSortClick = { showSortDialog = true },
+                        onViewModeClick = { viewMode = if (viewMode == 0) 1 else 0 },
+                        scrollBehavior = scrollBehavior
+                    )
+                }
             }
         },
         bottomBar = {
@@ -448,6 +462,202 @@ private fun MainTopBar(
         ),
         scrollBehavior = scrollBehavior
     )
+}
+
+/**
+ * "应用"页专用的头部卡片，仿 SDK Monitor 风格：
+ * 圆角卡片背景，标题旁带应用总数标签，下方是常驻可见的搜索条（点击进入搜索模式）+
+ * 筛选/更多操作图标按钮，不用像之前那样先点搜索图标才能唤出输入框。
+ */
+@Composable
+private fun AppListHeaderCard(
+    appCount: Int,
+    viewMode: Int,
+    activeFilterCount: Int,
+    groupMode: GroupMode,
+    onSearchClick: () -> Unit,
+    onFilterClick: () -> Unit,
+    onGroupClick: () -> Unit,
+    onSortClick: () -> Unit,
+    onViewModeClick: () -> Unit
+) {
+    var showMoreMenu by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.statusBars),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = AppDimens.Space.lg, vertical = AppDimens.Space.md)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(AppDimens.Radius.full),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = "${appCount}个应用",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = AppDimens.Space.md, vertical = AppDimens.Space.sm)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(AppDimens.Space.md))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.Space.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(AppDimens.Radius.full))
+                        .clickable(onClick = onSearchClick),
+                    shape = RoundedCornerShape(AppDimens.Radius.full),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = AppDimens.Space.md, vertical = AppDimens.Space.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = stringResource(R.string.search_label),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(AppDimens.Space.sm))
+                        Text(
+                            text = stringResource(R.string.search_apps_placeholder),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(AppDimens.Radius.full),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    IconButton(onClick = onFilterClick) {
+                        if (activeFilterCount > 0) {
+                            BadgedBox(
+                                badge = {
+                                    Badge {
+                                        Text(activeFilterCount.toString())
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FilterList,
+                                    contentDescription = stringResource(R.string.menu_filter)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.FilterList,
+                                contentDescription = stringResource(R.string.menu_filter)
+                            )
+                        }
+                    }
+                }
+
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(AppDimens.Radius.full),
+                        color = MaterialTheme.colorScheme.surface
+                    ) {
+                        IconButton(onClick = { showMoreMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.menu_more)
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_sort)) },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.Sort, contentDescription = null)
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onSortClick()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (groupMode != GroupMode.NONE) {
+                                        stringResource(R.string.menu_group_active, groupMode.label)
+                                    } else {
+                                        stringResource(R.string.menu_group)
+                                    }
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Layers,
+                                    contentDescription = null,
+                                    tint = if (groupMode != GroupMode.NONE) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onGroupClick()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (viewMode == 0) stringResource(R.string.menu_switch_to_grid) else stringResource(R.string.menu_switch_to_list)
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (viewMode == 0) Icons.Default.Apps else Icons.AutoMirrored.Filled.List,
+                                    contentDescription = null
+                                )
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onViewModeClick()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**

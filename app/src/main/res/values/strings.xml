@@ -292,6 +292,7 @@
     <string name="copied">已复制</string>
     <string name="search_hint">搜索应用…</string>
     <string name="search_label">搜索</string>
+    <string name="search_apps_placeholder">搜索应用...</string>
     <string name="back_label">返回</string>
     <string name="clear_label">清除</string>
     <string name="setting_dynamic_color">动态取色</string>
