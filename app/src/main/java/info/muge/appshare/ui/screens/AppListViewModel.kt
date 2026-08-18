@@ -176,12 +176,17 @@ class AppListViewModel : ViewModel() {
                     val filtered = applyFilter(cachedList, currentState.filterConfig)
                     val grouped = applyGroup(filtered, currentState.groupMode)
                     buildAlphabetIndex(filtered)
+                    val quickInstallers = cachedList.map { it.getInstallSource() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .sorted()
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             isBackgroundSyncing = true,
                             appList = filtered,
-                            groupedAppList = grouped
+                            groupedAppList = grouped,
+                            availableInstallers = quickInstallers
                         )
                     }
                 }
