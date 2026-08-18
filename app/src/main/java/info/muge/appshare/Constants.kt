@@ -68,7 +68,7 @@ object Constants {
      * this preference stands for a boolean value;
      */
     const val PREFERENCE_SHOW_SYSTEM_APP = "show_system_app"
-    const val PREFERENCE_SHOW_SYSTEM_APP_DEFAULT = false
+    const val PREFERENCE_SHOW_SYSTEM_APP_DEFAULT = true
 
     /**
      * stands for a boolean value

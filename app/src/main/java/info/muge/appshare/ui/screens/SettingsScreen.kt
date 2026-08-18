@@ -115,14 +115,6 @@ fun SettingsScreen(
 
     // 设置值
     var languageValue by remember { mutableIntStateOf(settings.getInt(Constants.PREFERENCE_LANGUAGE, Constants.PREFERENCE_LANGUAGE_DEFAULT)) }
-    var showSystemApp by remember {
-        mutableStateOf(
-            settings.getBoolean(
-                Constants.PREFERENCE_SHOW_SYSTEM_APP,
-                Constants.PREFERENCE_SHOW_SYSTEM_APP_DEFAULT
-            )
-        )
-    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -155,21 +147,6 @@ fun SettingsScreen(
             iconRes = R.drawable.ic_folder,
             title = stringResource(R.string.activity_settings_path),
             value = SPUtil.getDisplayingExportPath(context)
-        )
-
-        Spacer(modifier = Modifier.height(AppDimens.Space.sm))
-
-        SettingToggleItem(
-            iconRes = R.drawable.ic_settings,
-            title = stringResource(R.string.main_card_show_system_app),
-            value = "开启后显示系统应用",
-            checked = showSystemApp,
-            onCheckedChange = {
-                showSystemApp = it
-                settings.edit()
-                    .putBoolean(Constants.PREFERENCE_SHOW_SYSTEM_APP, it)
-                    .apply()
-            }
         )
 
         Spacer(modifier = Modifier.height(AppDimens.Space.sm))
