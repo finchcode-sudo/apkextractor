@@ -42,18 +42,12 @@ fun AppInfoContent(appItem: AppItem) {
             )
             InfoDivider()
 
-            // 版本名
+            // 版本信息（版本名+版本号合并显示，如 3.7.5（65））
+            val versionInfo = "${appItem.getVersionName()}（${appItem.getVersionCode()}）"
             InfoItemHorizontal(
-                label = stringResource(R.string.activity_detail_version_name),
-                value = appItem.getVersionName(),
-                onClick = { copyToClipboard(context, appItem.getVersionName()) }
-            )
-
-            // 版本号
-            InfoItemHorizontal(
-                label = stringResource(R.string.activity_detail_version_code),
-                value = appItem.getVersionCode().toString(),
-                onClick = { copyToClipboard(context, appItem.getVersionCode().toString()) }
+                label = stringResource(R.string.activity_detail_version_info),
+                value = versionInfo,
+                onClick = { copyToClipboard(context, versionInfo) }
             )
 
             // 大小

@@ -35,8 +35,7 @@
     <string name="activity_detail_market">在应用商店查看</string>
     <string name="activity_detail_uninstall">卸载</string>
     <string name="activity_detail_package_name">应用包名</string>
-    <string name="activity_detail_version_name">版本名</string>
-    <string name="activity_detail_version_code">版本号</string>
+    <string name="activity_detail_version_info">版本信息</string>
     <string name="activity_detail_package_size">应用包大小</string>
     <string name="activity_detail_first_install_time">首次安装时间</string>
     <string name="activity_detail_last_update_time">上次更新时间</string>
