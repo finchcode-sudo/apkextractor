@@ -78,4 +78,27 @@ object AppOpsRootHelper {
             else -> OpMode.UNKNOWN
         }
     }
+
+    /**
+     * 设置指定应用、指定 op 的模式（需要 root）。
+     * 返回是否设置成功（通过设置后再读一次进行校验）。
+     */
+    fun setOpMode(packageName: String, op: String, mode: OpMode): Boolean {
+        if (!RootUtils.isRootAvailable()) return false
+        val modeArg = when (mode) {
+            OpMode.ALLOW -> "allow"
+            OpMode.IGNORE -> "ignore"
+            OpMode.DENY -> "deny"
+            OpMode.DEFAULT -> "default"
+            OpMode.FOREGROUND -> "foreground"
+            OpMode.UNKNOWN -> return false
+        }
+
+        RootUtils.execRootCommand("appops set $packageName $op $modeArg")
+        RootUtils.execRootCommand("cmd appops set $packageName $op $modeArg")
+
+        // appops set 命令成功时通常没有输出，用读回的方式校验是否真的生效
+        val verify = getOpMode(packageName, op)
+        return verify == mode || (mode == OpMode.ALLOW && verify == OpMode.FOREGROUND)
+    }
 }
