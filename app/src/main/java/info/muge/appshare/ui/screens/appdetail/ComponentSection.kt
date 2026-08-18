@@ -47,6 +47,7 @@ import info.muge.appshare.R
 import info.muge.appshare.items.AppItem
 import info.muge.appshare.ui.ToastManager
 import info.muge.appshare.ui.theme.AppDimens
+import info.muge.appshare.utils.AppOpsRootHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
