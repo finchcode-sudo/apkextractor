@@ -130,6 +130,21 @@ fun SettingsScreen(
             .padding(horizontal = AppDimens.Space.lg)
             .padding(top = AppDimens.Space.sm, bottom = 100.dp)
     ) {
+        // 分组标题：数据
+        SectionTitle(title = "数据")
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 应用变更记录
+        SettingItem(
+            iconRes = R.drawable.ic_info,
+            title = "应用变更记录",
+            value = "查看安装、更新、卸载记录",
+            onClick = onNavigateToAppChange
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // 分组标题：通用设置
         SectionTitle(title = "通用设置")
 
@@ -231,20 +246,6 @@ fun SettingsScreen(
             value = getLanguageDisplayText(languageValue, context),
             isValueHighlighted = true,
             onClick = { showLanguageDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SectionTitle(title = "数据")
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // 应用变更记录
-        SettingItem(
-            iconRes = R.drawable.ic_info,
-            title = "应用变更记录",
-            value = "查看安装、更新、卸载记录",
-            onClick = onNavigateToAppChange
         )
 
         Spacer(modifier = Modifier.height(16.dp))
