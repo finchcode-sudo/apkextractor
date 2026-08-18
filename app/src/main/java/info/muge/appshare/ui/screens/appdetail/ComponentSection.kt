@@ -36,10 +36,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,10 +48,7 @@ import info.muge.appshare.R
 import info.muge.appshare.items.AppItem
 import info.muge.appshare.ui.ToastManager
 import info.muge.appshare.ui.theme.AppDimens
-import info.muge.appshare.utils.AppOpsRootHelper
-import info.muge.appshare.utils.RootUtils
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -67,18 +62,10 @@ fun ComponentListContent(
 ) {
     val components = remember { mutableStateListOf<ComponentItem>() }
     var isLoading by remember { mutableStateOf(true) }
-    var rootAvailable by remember { mutableStateOf(false) }
-    val switchStates = remember { mutableStateMapOf<String, Boolean>() }
-    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(appItem, componentType) {
         isLoading = true
         components.clear()
-        switchStates.clear()
-
-        if (componentType == ComponentType.PERMISSION) {
-            rootAvailable = withContext(Dispatchers.IO) { RootUtils.isRootAvailable() }
-        }
 
         val items = withContext(Dispatchers.IO) {
             val packageInfo = appItem.getFullPackageInfo(context)
@@ -110,22 +97,6 @@ fun ComponentListContent(
                                 // 未在系统中注册的权限（如厂商私有权限），仅展示名称
                             }
 
-                            // 优先尝试用 root 权限查询实时 App Ops 状态，跟系统设置界面完全同步；
-                            // 拿不到 root 或该权限没有对应 op 时，退回标准 PackageManager 授权标记
-                            val opName = AppOpsRootHelper.permissionToOp(permission)
-                            val liveGranted = opName?.let { op ->
-                                AppOpsRootHelper.getOpMode(appItem.getPackageName(), op)?.let { mode ->
-                                    when (mode) {
-                                        AppOpsRootHelper.OpMode.ALLOW,
-                                        AppOpsRootHelper.OpMode.FOREGROUND -> true
-                                        AppOpsRootHelper.OpMode.IGNORE,
-                                        AppOpsRootHelper.OpMode.DENY -> false
-                                        AppOpsRootHelper.OpMode.DEFAULT -> granted
-                                        AppOpsRootHelper.OpMode.UNKNOWN -> null
-                                    }
-                                }
-                            } ?: granted
-
                             result.add(
                                 ComponentItem(
                                     name = permission,
@@ -137,8 +108,7 @@ fun ComponentListContent(
                                     permissionFlags = flagsText,
                                     permissionDefiningPackage = definingPackage,
                                     permissionGroup = group ?: "android.permission-group.UNDEFINED",
-                                    permissionOpName = opName,
-                                    permissionGranted = liveGranted
+                                    permissionGranted = granted
                                 )
                             )
                         }
@@ -201,11 +171,6 @@ fun ComponentListContent(
         }
 
         components.addAll(items)
-        items.forEach { item ->
-            if (item.permissionOpName != null) {
-                switchStates[item.name] = item.permissionGranted
-            }
-        }
         isLoading = false
     }
 
@@ -229,29 +194,7 @@ fun ComponentListContent(
                     if (componentType == ComponentType.PERMISSION) {
                         PermissionItemCard(
                             item = item,
-                            checked = switchStates[item.name] ?: item.permissionGranted,
-                            switchEnabled = item.permissionOpName != null && rootAvailable,
-                            onClick = { copyToClipboard(context, item.name) },
-                            onToggle = { newValue ->
-                                val op = item.permissionOpName
-                                if (op != null) {
-                                    switchStates[item.name] = newValue
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        val mode = if (newValue) {
-                                            AppOpsRootHelper.OpMode.ALLOW
-                                        } else {
-                                            AppOpsRootHelper.OpMode.IGNORE
-                                        }
-                                        val success = AppOpsRootHelper.setOpMode(
-                                            appItem.getPackageName(), op, mode
-                                        )
-                                        if (!success) {
-                                            // 设置失败，回滚开关显示的状态
-                                            switchStates[item.name] = !newValue
-                                        }
-                                    }
-                                }
-                            }
+                            onClick = { copyToClipboard(context, item.name) }
                         )
                     } else {
                         ComponentItemCard(
@@ -281,8 +224,6 @@ data class ComponentItem(
     val permissionFlags: String? = null,
     val permissionDefiningPackage: String? = null,
     val permissionGroup: String? = null,
-    // root 相关：该权限对应的 AppOps op 名称（没有则为 null），以及当前是否已授权
-    val permissionOpName: String? = null,
     val permissionGranted: Boolean = false
 )
 
@@ -402,10 +343,7 @@ private fun ComponentItemCard(
 @Composable
 private fun PermissionItemCard(
     item: ComponentItem,
-    checked: Boolean,
-    switchEnabled: Boolean,
-    onClick: () -> Unit,
-    onToggle: (Boolean) -> Unit
+    onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -435,9 +373,9 @@ private fun PermissionItemCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Switch(
-                    checked = checked,
-                    onCheckedChange = onToggle,
-                    enabled = switchEnabled
+                    checked = item.permissionGranted,
+                    onCheckedChange = {},
+                    enabled = false
                 )
             }
             if (!item.permissionDescription.isNullOrEmpty()) {
