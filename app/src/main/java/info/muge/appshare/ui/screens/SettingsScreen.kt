@@ -257,7 +257,7 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // 分组标题：关于
-        SectionTitle(title = "关于")
+        SectionTitle(title = "其它")
 
         Spacer(modifier = Modifier.height(12.dp))
 
