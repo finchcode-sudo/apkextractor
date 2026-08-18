@@ -97,7 +97,7 @@ fun ComponentListContent(
                             }
 
                             val statusText = if (granted) "granted" else "revoked"
-                            val fullFlags = if (flagsText.isNullOrEmpty()) statusText else "$flagsText|$statusText"
+                            val fullFlags = if (flagsText.isNullOrEmpty()) statusText else "$flagsText  $statusText"
 
                             result.add(
                                 ComponentItem(
@@ -256,7 +256,7 @@ private fun describeProtectionLevel(level: Int): String {
     if (hasFlag(0x4000)) flags.add("oem")
     if (hasFlag(0x8000)) flags.add("vendorPrivileged")
 
-    return (listOf(baseText) + flags).joinToString("|")
+    return (listOf(baseText) + flags).joinToString("  ")
 }
 
 @OptIn(ExperimentalFoundationApi::class)
