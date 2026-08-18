@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -178,7 +178,10 @@ fun AppChangeScreen(
                         )
                     }
 
-                    items(dayRecords, key = { "${it.packageName}_${it.timestamp}" }) { record ->
+                    itemsIndexed(
+                        dayRecords,
+                        key = { index, record -> "${record.packageName}_${record.changeType}_${record.timestamp}_$index" }
+                    ) { _, record ->
                         ChangeRecordCard(
                             record = record,
                             onClick = { detailPackageName = record.packageName }

@@ -87,7 +87,11 @@ object AppChangeRepository {
 
     /**
      * 添加一条变更记录
+     * 加锁：PackageChangeReceiver（广播触发）和列表页离线校验（每次回到列表页触发）
+     * 都可能并发调用写入，读-改-写没有同步的话会互相覆盖导致数据重复，
+     * 进而让"应用变更记录"列表出现重复 key 直接崩溃。
      */
+    @Synchronized
     fun addRecord(context: Context, record: AppChangeRecord) {
         val records = getRecords(context).toMutableList()
         records.add(0, record) // 最新的在前面
@@ -126,6 +130,7 @@ object AppChangeRepository {
      * 注意：本方法涉及大量 PackageManager 查询与磁盘IO，调用方必须在后台线程（如 Dispatchers.IO）执行，
      * 绝不能在主线程调用，否则遍历几百个应用会导致明显卡顿甚至 ANR。
      */
+    @Synchronized
     fun backfillFromInstalledPackages(context: Context) {
         val packages = try {
             context.packageManager.getInstalledPackages(0)
@@ -208,6 +213,7 @@ object AppChangeRepository {
      *
      * 注意：本方法涉及大量 PackageManager 查询与磁盘IO，调用方必须在后台线程（如 Dispatchers.IO）执行。
      */
+    @Synchronized
     fun diffAndRecordOfflineChanges(
         context: Context,
         oldPackages: Map<String, Triple<Long, Long, String>>,
