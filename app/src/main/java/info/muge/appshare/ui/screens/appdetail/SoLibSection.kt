@@ -128,6 +128,13 @@ fun SoLibContent(appItem: AppItem) {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = item.fullPath,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            )
                         }
                     }
                 }
