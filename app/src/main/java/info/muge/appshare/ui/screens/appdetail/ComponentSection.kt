@@ -96,7 +96,24 @@ fun ComponentListContent(
                                 // 未在系统中注册的权限（如厂商私有权限），仅展示名称
                             }
 
-                            val statusText = if (granted) "granted" else "revoked"
+                            // 优先尝试用 root 权限查询实时 App Ops 状态，跟系统设置界面完全同步；
+                            // 拿不到 root 或该权限没有对应 op 时，退回标准 PackageManager 授权标记
+                            val opName = AppOpsRootHelper.permissionToOp(permission)
+                            val liveStatus = opName?.let { op ->
+                                AppOpsRootHelper.getOpMode(appItem.getPackageName(), op)?.let { mode ->
+                                    when (mode) {
+                                        AppOpsRootHelper.OpMode.ALLOW -> "granted (root)"
+                                        AppOpsRootHelper.OpMode.FOREGROUND -> "foreground (root)"
+                                        AppOpsRootHelper.OpMode.IGNORE,
+                                        AppOpsRootHelper.OpMode.DENY -> "revoked (root)"
+                                        AppOpsRootHelper.OpMode.DEFAULT ->
+                                            if (granted) "granted (root)" else "revoked (root)"
+                                        AppOpsRootHelper.OpMode.UNKNOWN -> null
+                                    }
+                                }
+                            }
+
+                            val statusText = liveStatus ?: if (granted) "granted" else "revoked"
                             val fullFlags = if (flagsText.isNullOrEmpty()) statusText else "$flagsText  $statusText"
 
                             result.add(
