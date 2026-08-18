@@ -71,6 +71,7 @@
     <string name="activity_detail_signature_md5">MD5</string>
     <string name="activity_detail_signature_sha1">SHA1</string>
     <string name="activity_detail_signature_sha256">SHA256</string>
+    <string name="activity_detail_signature_cert_hex">Certificate (Hex)</string>
 
     <string name="activity_detail_hash_head">Hash values of the file</string>
     <string name="activity_detail_hash_md5">MD5</string>

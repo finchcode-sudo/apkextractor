@@ -38,6 +38,8 @@ data class ApkSignatureInfo(
     val md5: String = "",
     val sha1: String = "",
     val sha256: String = "",
+    // 证书原始数据 (DER, HEX)
+    val certHex: String = "",
     // 是否有效
     val isValid: Boolean = true,
     val errorMessage: String = ""
@@ -104,6 +106,7 @@ object ApkSignatureUtil {
                 md5 = fingerprints.first,
                 sha1 = fingerprints.second,
                 sha256 = fingerprints.third,
+                certHex = certInfo.thirteenth,
                 isValid = certInfo.first.isNotEmpty()
             )
         } catch (e: Exception) {
@@ -278,6 +281,7 @@ object ApkSignatureUtil {
         var modulus = ""
         var sigAlgorithm = ""
         var sigAlgorithmOID = ""
+        var certHex = ""
 
         try {
             JarFile(apkPath).use { jarFile ->
@@ -306,6 +310,10 @@ object ApkSignatureUtil {
                             modulusSize = "${publicKey.modulus.bitLength()} bit"
                             modulus = publicKey.modulus.toString(16)
                         }
+
+                        certHex = x509cert.encoded.joinToString("") { byte ->
+                            "%02x".format(byte)
+                        }
                     }
                 }
             }
@@ -316,7 +324,7 @@ object ApkSignatureUtil {
         return CertInfo(
             subject, issuer, serial, notBefore, notAfter,
             pubKeyFormat, pubKeyAlgorithm, pubKeyExponent, modulusSize, modulus,
-            sigAlgorithm, sigAlgorithmOID
+            sigAlgorithm, sigAlgorithmOID, certHex
         )
     }
 
@@ -418,5 +426,6 @@ private data class CertInfo(
     val ninth: String,      // modulusSize
     val tenth: String,      // modulus
     val eleventh: String,   // signatureAlgorithm
-    val twelfth: String     // signatureAlgorithmOID
+    val twelfth: String,    // signatureAlgorithmOID
+    val thirteenth: String  // certHex
 )

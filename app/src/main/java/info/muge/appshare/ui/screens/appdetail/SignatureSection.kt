@@ -55,6 +55,7 @@ data class SignatureInfo(
     val md5: String = "",
     val sha1: String = "",
     val sha256: String = "",
+    val certHex: String = "",
     val signatureSchemes: Set<SignatureScheme> = emptySet()
 )
 
@@ -95,6 +96,7 @@ fun SignatureContent(appItem: AppItem) {
                     md5 = fullInfo.md5.ifEmpty { EnvironmentUtil.getSignatureMD5StringOfPackageInfo(packageInfo) },
                     sha1 = fullInfo.sha1.ifEmpty { EnvironmentUtil.getSignatureSHA1OfPackageInfo(packageInfo) },
                     sha256 = fullInfo.sha256.ifEmpty { EnvironmentUtil.getSignatureSHA256OfPackageInfo(packageInfo) },
+                    certHex = fullInfo.certHex,
                     signatureSchemes = fullInfo.signatureSchemes
                 )
             }
@@ -211,6 +213,11 @@ fun SignatureContent(appItem: AppItem) {
                     label = stringResource(R.string.activity_detail_signature_sha256),
                     value = info.sha256,
                     onClick = { copyToClipboard(context, info.sha256) }
+                )
+                SignatureItem(
+                    label = stringResource(R.string.activity_detail_signature_cert_hex),
+                    value = info.certHex,
+                    onClick = { copyToClipboard(context, info.certHex) }
                 )
             }
         }
