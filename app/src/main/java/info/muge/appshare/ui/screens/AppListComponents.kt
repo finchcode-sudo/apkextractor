@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
@@ -41,16 +42,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -497,8 +501,21 @@ internal fun LinearAppItem(
                 val apiColor = Color(targetSdk.apiToColor())
                 val apiDescription = targetSdk.apiToVersion()
 
+                // 用实际文字测量而不是拍脑袋定死一个 dp 值：
+                // 以当前最常见、最宽的文案（"Android 16"）为基准，测出它真实渲染需要多宽，
+                // 让所有徽章的宽度都跟这个基准对齐——36 的徽章本来就是被这段文字撑开的，
+                // 所以它自己的宽度不会有任何变化，其它较短文案的徽章会被撑到跟它一样宽。
+                val textMeasurer = rememberTextMeasurer()
+                val labelSmallStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
+                val referenceTextWidth = remember(labelSmallStyle) {
+                    textMeasurer.measure("Android 16", style = labelSmallStyle).size.width
+                }
+                val referenceWidthDp = with(LocalDensity.current) { referenceTextWidth.toDp() }
+                val badgeMinWidth = referenceWidthDp + AppDimens.Space.sm * 2
+
                 Column(
                     modifier = Modifier
+                        .widthIn(min = badgeMinWidth)
                         .clip(RoundedCornerShape(AppDimens.Radius.sm))
                         .background(apiColor.copy(alpha = 0.07f))
                         .border(
