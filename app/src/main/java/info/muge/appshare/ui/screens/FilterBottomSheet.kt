@@ -129,23 +129,6 @@ fun FilterBottomSheet(
 
             Spacer(modifier = Modifier.height(AppDimens.Space.lg))
 
-            // 大小范围
-            SectionLabel("大小范围")
-            Spacer(modifier = Modifier.height(AppDimens.Space.sm))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(AppDimens.Space.sm),
-                verticalArrangement = Arrangement.spacedBy(AppDimens.Space.xs)
-            ) {
-                SizeRange.entries.forEach { range ->
-                    FilterChip(
-                        selected = sizeRange == range,
-                        onClick = { sizeRange = range },
-                        label = { Text(range.label, style = MaterialTheme.typography.labelMedium) },
-                        shape = RoundedCornerShape(AppDimens.Radius.full)
-                    )
-                }
-            }
-
             // 安装来源（仅在有数据时显示）
             if (availableInstallers.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(AppDimens.Space.lg))

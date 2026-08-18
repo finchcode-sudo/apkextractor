@@ -435,23 +435,6 @@ private fun MainTopBar(
                                 onGroupClick()
                             }
                         )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = if (viewMode == 0) stringResource(R.string.menu_switch_to_grid) else stringResource(R.string.menu_switch_to_list)
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = if (viewMode == 0) Icons.Default.Apps else Icons.AutoMirrored.Filled.List,
-                                    contentDescription = null
-                                )
-                            },
-                            onClick = {
-                                showMoreMenu = false
-                                onViewModeClick()
-                            }
-                        )
                     }
                 }
             }
@@ -637,23 +620,6 @@ private fun AppListHeaderCard(
                             onClick = {
                                 showMoreMenu = false
                                 onGroupClick()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = if (viewMode == 0) stringResource(R.string.menu_switch_to_grid) else stringResource(R.string.menu_switch_to_list)
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = if (viewMode == 0) Icons.Default.Apps else Icons.AutoMirrored.Filled.List,
-                                    contentDescription = null
-                                )
-                            },
-                            onClick = {
-                                showMoreMenu = false
-                                onViewModeClick()
                             }
                         )
                     }
