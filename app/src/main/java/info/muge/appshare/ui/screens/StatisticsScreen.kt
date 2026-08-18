@@ -186,6 +186,11 @@ fun StatisticsScreen(
             item {
                 SummaryCard(
                     totalCount = uiState.currentData.values.sumOf { it.size },
+                    totalCountLabel = if (uiState.currentType == StatisticsType.PERMISSION) {
+                        "权限声明总数"
+                    } else {
+                        "应用总数"
+                    },
                     categoryCount = uiState.currentData.size,
                     topCategory = sortedEntries.firstOrNull()?.key,
                     topCategoryCount = sortedEntries.firstOrNull()?.value?.size ?: 0,

@@ -60,6 +60,7 @@ import java.util.Locale
 @Composable
 internal fun SummaryCard(
     totalCount: Int,
+    totalCountLabel: String = "应用总数",
     categoryCount: Int,
     topCategory: String?,
     topCategoryCount: Int,
@@ -172,7 +173,7 @@ internal fun SummaryCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "应用总数",
+                        text = totalCountLabel,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
