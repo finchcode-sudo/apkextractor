@@ -293,7 +293,8 @@ class AppItem : Comparable<AppItem>, DisplayItem {
             flag = flag or PackageManager.GET_RECEIVERS
         }
         if (settings.getBoolean(Constants.PREFERENCE_LOAD_APK_SIGNATURE, Constants.PREFERENCE_LOAD_APK_SIGNATURE_DEFAULT)) {
-            flag = flag or PackageManager.GET_SIGNATURES
+            @Suppress("InlinedApi", "DEPRECATION")
+            flag = flag or PackageManager.GET_SIGNATURES or PackageManager.GET_SIGNING_CERTIFICATES
         }
         if (settings.getBoolean(Constants.PREFERENCE_LOAD_SERVICES, Constants.PREFERENCE_LOAD_SERVICES_DEFAULT)) {
             flag = flag or PackageManager.GET_SERVICES
