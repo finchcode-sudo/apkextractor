@@ -194,7 +194,20 @@ fun AppDetailScreen(
                             input.copyTo(output)
                         }
                     } ?: throw Exception("无法打开文件")
-                    AppItem(context, cacheFile.absolutePath)
+
+                    val directParseOk = try {
+                        context.packageManager.getPackageArchiveInfo(cacheFile.absolutePath, 0) != null
+                    } catch (e: Exception) {
+                        false
+                    }
+
+                    val analysisFile = if (directParseOk) {
+                        cacheFile
+                    } else {
+                        extractBaseApkFromContainer(cacheFile) ?: cacheFile
+                    }
+
+                    AppItem(context, analysisFile.absolutePath)
                 }
                 else -> null
             }
@@ -564,5 +577,35 @@ private fun AppDetailHeader(
                 }
             }
         }
+    }
+}
+
+/**
+ * 从"拆分APK容器"文件（.apks/.apkm/.xapk/.apkx 等，本质都是 zip）里取出一个能代表整个应用的 apk，
+ * 用来做详情分析。不看扩展名，优先找 base.apk，没有就取体积最大的 .apk 条目。
+ */
+private fun extractBaseApkFromContainer(containerFile: java.io.File): java.io.File? {
+    return try {
+        java.util.zip.ZipFile(containerFile).use { zip ->
+            val apkEntries = zip.entries().toList().filter {
+                !it.isDirectory && it.name.lowercase().endsWith(".apk")
+            }
+            if (apkEntries.isEmpty()) return null
+
+            val targetEntry = apkEntries.firstOrNull {
+                it.name.substringAfterLast('/').equals("base.apk", ignoreCase = true)
+            } ?: apkEntries.maxByOrNull { it.size }!!
+
+            val outFile = java.io.File(
+                containerFile.parentFile,
+                "base_${System.currentTimeMillis()}.apk"
+            )
+            zip.getInputStream(targetEntry).use { input ->
+                outFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            outFile
+        }
+    } catch (e: Exception) {
+        null
     }
 }

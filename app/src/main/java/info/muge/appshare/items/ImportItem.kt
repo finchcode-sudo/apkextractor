@@ -69,7 +69,8 @@ class ImportItem : DisplayItem, Comparable<ImportItem> {
                 type = ImportType.ZIP
                 icon = ContextCompat.getDrawable(context, R.drawable.icon_zip)!!
             }
-            fileName.endsWith(".xapk") -> {
+            fileName.endsWith(".xapk") || fileName.endsWith(".apks") ||
+            fileName.endsWith(".apkm") || fileName.endsWith(".apkx") -> {
                 type = ImportType.ZIP
                 icon = ContextCompat.getDrawable(context, R.drawable.icon_xapk)!!
             }
