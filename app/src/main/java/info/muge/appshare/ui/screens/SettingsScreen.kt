@@ -236,7 +236,7 @@ fun SettingsScreen(
         SettingItem(
             iconRes = R.drawable.ic_folder,
             title = "安装 APK",
-            value = "选择一个 apk 文件进行安装",
+            value = "请选择一个或多个apk/apks/apkx/apkm文件进行安装",
             onClick = {
                 apkInstallLauncher.launch(arrayOf("application/vnd.android.package-archive"))
             }
@@ -248,7 +248,7 @@ fun SettingsScreen(
         SettingItem(
             iconRes = R.drawable.ic_info,
             title = "APK 分析器",
-            value = "查看未安装 apk 文件的详细信息",
+            value = "获取有关apk/apks/apkx/apkm文件的详细信息",
             onClick = {
                 apkAnalyzerLauncher.launch(arrayOf("application/vnd.android.package-archive"))
             }
