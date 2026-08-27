@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
@@ -113,6 +115,45 @@ fun SettingsScreen(
         }
     }
 
+    // 电池优化白名单状态：不在白名单里的话，系统在进程被杀后可能延迟甚至不投递
+    // PACKAGE_ADDED/PACKAGE_REMOVED 广播，导致"应用变更记录"里的卸载时间
+    // 变成"发现时间"而不是真实卸载时间。加入白名单能大幅提高实时记录的准确性。
+    fun isIgnoringBatteryOptimizations(): Boolean {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            ?: return true
+        return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
+    var batteryOptimizationIgnored by remember { mutableStateOf(isIgnoringBatteryOptimizations()) }
+    val batteryOptimizationLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) {
+        // 无论用户在系统弹窗里选了"允许"还是"忽略"，回来时都重新读取一次真实状态
+        batteryOptimizationIgnored = isIgnoringBatteryOptimizations()
+    }
+    fun requestIgnoreBatteryOptimizations() {
+        if (batteryOptimizationIgnored) {
+            "已在电池优化白名单中".toast()
+            return
+        }
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            batteryOptimizationLauncher.launch(intent)
+        } catch (_: Exception) {
+            // 部分定制ROM（如MIUI）可能不支持这个系统弹窗，兜底跳转到应用详情页，
+            // 让用户手动去"电池"设置里操作
+            try {
+                val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                context.startActivity(fallbackIntent)
+            } catch (_: Exception) {
+                "无法打开电池优化设置，请手动在系统设置中操作".toast()
+            }
+        }
+    }
+
     // 设置值
     var languageValue by remember { mutableIntStateOf(settings.getInt(Constants.PREFERENCE_LANGUAGE, Constants.PREFERENCE_LANGUAGE_DEFAULT)) }
     Column(
@@ -133,6 +174,21 @@ fun SettingsScreen(
             title = "应用变更记录",
             value = "查看安装、更新、卸载记录",
             onClick = onNavigateToAppChange
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 电池优化白名单：不加入白名单的话，系统可能延迟/不投递应用变更广播，
+        // 导致"应用变更记录"里卸载时间不准（变成打开App时的发现时间）
+        SettingItem(
+            iconRes = R.drawable.ic_settings,
+            title = "后台运行权限",
+            value = if (batteryOptimizationIgnored)
+                "已加入电池优化白名单，记录更准确"
+            else
+                "未加入白名单，卸载时间可能不准确，点击申请",
+            isValueHighlighted = !batteryOptimizationIgnored,
+            onClick = { requestIgnoreBatteryOptimizations() }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
