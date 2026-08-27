@@ -165,7 +165,7 @@ object Constants {
     const val ZIP_LEVEL_NORMAL = 5
     const val ZIP_LEVEL_HIGH = 9
 
-    const val PREFERENCE_FILENAME_FONT_DEFAULT = "$FONT_APP_PACKAGE_NAME-$FONT_APP_VERSIONCODE"
+    const val PREFERENCE_FILENAME_FONT_DEFAULT = "$FONT_APP_NAME" + "_" + "$FONT_APP_VERSIONNAME" + " (" + "$FONT_APP_VERSIONCODE" + ")"
 
     const val ACTION_REFRESH_APP_LIST = "info.muge.appshare.refresh_applist"
     const val ACTION_REFRESH_IMPORT_ITEMS_LIST = "info.muge.appshare.refresh_import_items_list"
