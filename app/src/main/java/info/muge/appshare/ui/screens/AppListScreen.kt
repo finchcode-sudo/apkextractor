@@ -49,12 +49,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import info.muge.appshare.Constants
+import info.muge.appshare.Global
 import info.muge.appshare.R
 import info.muge.appshare.items.AppItem
 import info.muge.appshare.ui.components.AlphabetIndexBar
 import info.muge.appshare.ui.dialogs.SortConfigDialog
 import info.muge.appshare.ui.theme.AppDimens
 import info.muge.appshare.utils.SPUtil
+import info.muge.appshare.utils.findActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -253,6 +255,33 @@ fun AppListScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(context.getString(R.string.snack_bar_clipboard))
                         }
+                    },
+                    onExportSelected = {
+                        if (state.selectedItems.isEmpty()) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(context.getString(R.string.snack_bar_no_app_selected))
+                            }
+                            return@MultiSelectCard
+                        }
+                        val selectedApps = state.appList.filter {
+                            state.selectedItems.contains(it.getPackageName())
+                        }
+                        val exportList = ArrayList<AppItem>()
+                        selectedApps.forEach { exportList.add(AppItem(it, false, false)) }
+                        Global.checkAndExportCertainAppItemsToSetPathWithoutShare(
+                            context.findActivity(),
+                            exportList,
+                            true,
+                            object : Global.ExportTaskFinishedListener {
+                                override fun onFinished(errorMessage: String) {
+                                    if (errorMessage.trim().isEmpty()) {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(context.getString(R.string.toast_export_complete))
+                                        }
+                                    }
+                                }
+                            }
+                        )
                     },
                     onUninstallSelected = {
                         if (state.selectedItems.isEmpty()) {
