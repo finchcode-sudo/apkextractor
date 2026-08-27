@@ -296,6 +296,7 @@
     <string name="permission_grant_short">授予</string>
     <string name="copy_package_names">复制包名</string>
     <string name="action_batch_uninstall">批量卸载</string>
+    <string name="action_batch_export">批量导出</string>
     <string name="app_no_launcher">应用没有界面，无法运行</string>
     <string name="choose_action">选择操作</string>
     <string name="copied">已复制</string>
