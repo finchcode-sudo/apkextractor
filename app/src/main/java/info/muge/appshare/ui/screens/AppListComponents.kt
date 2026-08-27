@@ -283,7 +283,8 @@ internal fun MultiSelectCard(
     onInvertSelection: () -> Unit,
     onDeselectAll: () -> Unit,
     onCopyPackageNames: () -> Unit,
-    onUninstallSelected: () -> Unit = {}
+    onUninstallSelected: () -> Unit = {},
+    onExportSelected: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -365,6 +366,13 @@ internal fun MultiSelectCard(
                 FilledTonalButton(onClick = onCopyPackageNames) {
                     Text(
                         text = stringResource(R.string.copy_package_names),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+
+                FilledTonalButton(onClick = onExportSelected) {
+                    Text(
+                        text = stringResource(R.string.action_batch_export),
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
