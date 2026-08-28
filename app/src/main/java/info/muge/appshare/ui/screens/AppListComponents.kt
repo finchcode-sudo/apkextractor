@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -342,35 +343,55 @@ internal fun MultiSelectCard(
                 horizontalArrangement = Arrangement.spacedBy(AppDimens.Space.sm),
                 verticalArrangement = Arrangement.spacedBy(AppDimens.Space.xs)
             ) {
-                FilledTonalButton(onClick = onSelectAll) {
+                val compactPadding = PaddingValues(
+                    horizontal = AppDimens.Space.md,
+                    vertical = AppDimens.Space.sm
+                )
+
+                FilledTonalButton(
+                    onClick = onSelectAll,
+                    contentPadding = compactPadding
+                ) {
                     Text(
                         text = stringResource(R.string.select_all_change),
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
 
-                FilledTonalButton(onClick = onInvertSelection) {
+                FilledTonalButton(
+                    onClick = onInvertSelection,
+                    contentPadding = compactPadding
+                ) {
                     Text(
                         text = stringResource(R.string.invert_selection),
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
 
-                FilledTonalButton(onClick = onDeselectAll) {
+                FilledTonalButton(
+                    onClick = onDeselectAll,
+                    contentPadding = compactPadding
+                ) {
                     Text(
                         text = stringResource(R.string.deselect_all),
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
 
-                FilledTonalButton(onClick = onCopyPackageNames) {
+                FilledTonalButton(
+                    onClick = onCopyPackageNames,
+                    contentPadding = compactPadding
+                ) {
                     Text(
                         text = stringResource(R.string.copy_package_names),
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
 
-                FilledTonalButton(onClick = onExportSelected) {
+                FilledTonalButton(
+                    onClick = onExportSelected,
+                    contentPadding = compactPadding
+                ) {
                     Text(
                         text = stringResource(R.string.action_batch_export),
                         style = MaterialTheme.typography.labelLarge
@@ -379,6 +400,7 @@ internal fun MultiSelectCard(
 
                 FilledTonalButton(
                     onClick = onUninstallSelected,
+                    contentPadding = compactPadding,
                     colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
