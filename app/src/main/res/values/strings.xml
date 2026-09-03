@@ -119,7 +119,7 @@
     <string name="dialog_import_delete_title">删除文件</string>
     <string name="dialog_import_delete_message">确定要删除选中的文件吗？</string>
 
-    <string name="toast_export_complete">应用已导出至</string>
+    <string name="toast_export_complete">应用已导出至/sdcard/Download/AppKit</string>
     <string name="toast_import_complete">导入完成,如有APK包可尝试手动安装</string>
 
     <string name="dialog_import_finished_error_title">提示</string>
