@@ -881,7 +881,7 @@ private fun FeedbackDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val feedbackEmail = "1206083231@qq.com"
+    val feedbackEmail = "无"
 
     AppBottomSheet(
         title = "意见反馈",
