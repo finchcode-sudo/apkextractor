@@ -84,14 +84,17 @@ fun SettingsScreen(
     var showExtensionDialog by remember { mutableStateOf(false) }
     var showDeviceNameDialog by remember { mutableStateOf(false) }
 
-    // APK 分析器：选择一个 apk 文件，跳转到应用详情页（复用已支持"未安装apk"的详情页逻辑）
+    // APK 分析器：选择一个 apk/apks/apkx/apkm 文件，跳转到应用详情页（复用已支持"未安装apk"的详情页逻辑）
+    // 注：apks/apkx/apkm 的系统 MIME 类型并不是 application/vnd.android.package-archive，
+    // 之前限定为该 MIME 会导致系统文件选择器直接把这些文件过滤掉、根本看不见，所以这里放开为 */*，
+    // 具体文件类型校验交给后续逻辑（ImportItem 已按扩展名识别 zip/apks/xapk/apkm/apkx）。
     val apkAnalyzerLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { onNavigateToAppDetailWithUri(it) }
     }
 
-    // 安装 APK：选择一个 apk 文件，直接调起系统安装器
+    // 安装 APK：选择一个 apk/apks/apkx/apkm 文件，直接调起系统安装器
     val apkInstallLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -102,15 +105,27 @@ fun SettingsScreen(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: Exception) { }
-            try {
-                val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(selectedUri, "application/vnd.android.package-archive")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+            val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
+
+            if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
+                // .apks/.xapk/.apkm/.apkx：里面是多个 split apk 打包在一起，
+                // 系统安装器不支持直接对着这种 zip 容器发 ACTION_VIEW 安装，需要走 PackageInstaller 多文件 Session
+                info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { errorMsg ->
+                    errorMsg.toast()
                 }
-                context.startActivity(installIntent)
-            } catch (e: Exception) {
-                "无法打开系统安装器：${e.message}".toast()
+            } else {
+                // 普通单个 .apk：沿用系统安装器 ACTION_VIEW，最简单可靠
+                try {
+                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(selectedUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(installIntent)
+                } catch (e: Exception) {
+                    "无法打开系统安装器：${e.message}".toast()
+                }
             }
         }
     }
@@ -294,7 +309,7 @@ fun SettingsScreen(
             title = "安装 APK",
             value = "请选择一个或多个apk/apks/apkx/apkm文件进行安装",
             onClick = {
-                apkInstallLauncher.launch(arrayOf("application/vnd.android.package-archive"))
+                apkInstallLauncher.launch(arrayOf("*/*"))
             }
         )
 
@@ -306,7 +321,7 @@ fun SettingsScreen(
             title = "APK 分析器",
             value = "获取有关apk/apks/apkx/apkm文件的详细信息",
             onClick = {
-                apkAnalyzerLauncher.launch(arrayOf("application/vnd.android.package-archive"))
+                apkAnalyzerLauncher.launch(arrayOf("*/*"))
             }
         )
 
