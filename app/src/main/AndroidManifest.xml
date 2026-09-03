@@ -2,12 +2,40 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!--
+        Android 11+
+        允许应用广泛查询设备上的已安装应用。
+
+        如果你的 App 是应用管理器/应用分享器等，
+        并且核心功能确实需要查看大量已安装应用，可以使用。
+    -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+
+    <!--
+        前台服务基础权限。
+        Android 9+。
+    -->
     <uses-permission
-        android:name="com.android.permission.GET_INSTALLED_APPS"
-        tools:ignore="QueryAllPackagesPermission" />
+        android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!--
+        Android 13+
+        如果前台服务需要显示通知，需要申请通知权限。
+    -->
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Android 6.0+
+        允许应用请求用户将本 App 加入电池优化豁免列表。
+
+        注意：
+        这不是自动获得白名单，只是允许发起系统请求。
+    -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".MyApplication"
@@ -17,44 +45,98 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
+        <!-- ========================================== -->
+        <!-- 主 Activity -->
+        <!-- ========================================== -->
+
         <activity
             android:name=".ComposeMainActivity"
             android:exported="true"
             android:theme="@style/AppTheme.NoActionBar"
             android:enableOnBackInvokedCallback="true">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
+
+
+        <!-- ========================================== -->
+        <!-- FileProvider -->
+        <!-- ========================================== -->
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="info.muge.appshare.FileProvider"
             android:exported="false"
             android:grantUriPermissions="true">
+
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
+
         </provider>
 
-        <!-- 静态注册：即使AppShare进程被系统杀掉，装/卸/更新应用时系统也会唤醒进程投递这个广播，
-             用来可靠记录应用变更历史，弥补动态注册接收器只在App存活时才生效的缺陷 -->
+
+        <!-- ========================================== -->
+        <!-- 应用安装 / 卸载 / 更新广播 -->
+        <!-- ========================================== -->
+
         <receiver
             android:name=".utils.PackageChangeReceiver"
             android:exported="true">
+
             <intent-filter>
+
+                <!-- 安装应用 -->
                 <action android:name="android.intent.action.PACKAGE_ADDED" />
+
+                <!-- 卸载应用 -->
                 <action android:name="android.intent.action.PACKAGE_REMOVED" />
+
+                <!-- 更新应用 -->
                 <action android:name="android.intent.action.PACKAGE_REPLACED" />
 
+                <!-- package 广播必须使用 package scheme -->
                 <data android:scheme="package" />
+
             </intent-filter>
+
         </receiver>
+
+
+        <!-- ========================================== -->
+        <!-- 前台服务 -->
+        <!-- ========================================== -->
+
+        <service
+            android:name=".service.AppMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+
+            <!--
+                Android 14+
+                specialUse 类型需要说明具体用途。
+            -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="持续监控设备上的应用状态变化" />
+
+        </service>
+
+
+        <!-- ========================================== -->
+        <!-- 其他 Meta-data -->
+        <!-- ========================================== -->
 
         <meta-data
             android:name="android.max_aspect"
             android:value="2.4" />
+
     </application>
 
 </manifest>
