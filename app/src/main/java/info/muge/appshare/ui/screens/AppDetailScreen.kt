@@ -170,8 +170,16 @@ fun AppDetailScreen(
         try {
             appItem = when {
                 packageName != null -> {
-                    synchronized(Global.app_list) {
+                    val fromList = synchronized(Global.app_list) {
                         Global.getAppItemByPackageNameFromList(Global.app_list, packageName)
+                    }
+                    fromList ?: try {
+                        // Global.app_list 可能因为进程被系统回收后重启、还没来得及重新扫描而为空，
+                        // 这里兜底直接用 PackageManager 现查一次，不再依赖那份全局缓存列表
+                        val pkgInfo = context.packageManager.getPackageInfo(packageName, 0)
+                        AppItem(context, pkgInfo)
+                    } catch (e: Exception) {
+                        null
                     }
                 }
                 apkUri != null -> {
