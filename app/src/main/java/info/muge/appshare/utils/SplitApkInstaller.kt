@@ -114,4 +114,52 @@ object SplitApkInstaller {
             onError("安装失败：${e.message}")
         }
     }
+
+    /**
+     * 普通单个 .apk 走同样的 PackageInstaller Session 提交（不再用 ACTION_VIEW + startActivity）。
+     */
+    fun installSingleApk(context: Context, uri: Uri, onError: (String) -> Unit) {
+        val appContext = context.applicationContext
+        val resolver = appContext.contentResolver
+        val packageInstaller = appContext.packageManager.packageInstaller
+        var sessionId = -1
+
+        try {
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            sessionId = packageInstaller.createSession(params)
+            val session = packageInstaller.openSession(sessionId)
+
+            val input = resolver.openInputStream(uri)
+            if (input == null) {
+                session.abandon()
+                onError("无法读取所选文件")
+                return
+            }
+
+            input.use { rawStream ->
+                session.openWrite("base.apk", 0, -1).use { out ->
+                    rawStream.copyTo(out)
+                    session.fsync(out)
+                }
+            }
+
+            val resultIntent = Intent(appContext, InstallResultReceiver::class.java).apply {
+                action = ACTION_INSTALL_RESULT
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getBroadcast(appContext, sessionId, resultIntent, flags)
+            session.commit(pendingIntent.intentSender)
+            session.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            if (sessionId != -1) {
+                try { packageInstaller.abandonSession(sessionId) } catch (_: Exception) { }
+            }
+            onError("安装失败：${e.message}")
+        }
+    }
 }
