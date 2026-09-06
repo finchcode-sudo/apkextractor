@@ -96,16 +96,58 @@ fun SettingsScreen(
         uri?.let { onNavigateToAppDetailWithUri(it) }
     }
 
-    // 安装 APK：用 ACTION_VIEW / ACTION_SEND_MULTIPLE 走系统正常的意图路由，不写死具体安装器包名，
-    // 这样如果用户把某个安装器（比如 InstallerX）设成了默认 apk 处理程序，系统会自动路由过去，
-    // 跟点文件管理器里的 apk 效果一致。多选批量时一次性把所有 uri 塞进 ACTION_SEND_MULTIPLE，
-    // 由对方 App 自己的批量安装界面接管，不用我们循环调 startActivity（会被系统拦截第二次）。
-    // 如果没有任何 App 能处理（ActivityNotFoundException），才退回我们自己的 PackageInstaller Session 兜底。
+    // 安装 APK：不管普通 apk 还是分包容器，一律用 ACTION_VIEW 走系统正常的意图路由，
+    // 不写死具体安装器包名，系统会按用户设置的默认 apk 处理程序（比如 InstallerX）自动路由，
+    // 跟点文件管理器里的 apk 效果一致。
+    //
+    // 多选批量时不能一次性把所有安装 Intent 都发出去：发出第一个后，我们自己的 App 马上被
+    // 切到后台（安装器盖上来了），这时候再调用第二次 startActivity() 属于"从后台拉起前台
+    // Activity"，会被系统直接拦截。而 ACTION_SEND_MULTIPLE（一次性把所有文件交给对方批量处理）
+    // 试过了不可靠：不是所有安装器都注册了接收"分享多个文件"这个入口（比如 InstallerX 就没有），
+    // 找不到能处理的 App 时只能退回系统自带流程，体验不一致。
+    //
+    // 所以用队列 + StartActivityForResult：一次只发一个，等用户从安装界面返回（装完/取消/
+    // 返回键，App 重新回到前台）触发回调后，再发下一个，这样不管交给谁处理都不会被拦。
+    val installQueue = remember { ArrayDeque<Uri>() }
+    val onInstallStepFinished = remember { arrayOfNulls<() -> Unit>(1) }
+
+    val installStepLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) {
+        onInstallStepFinished[0]?.invoke()
+    }
+
+    fun processNextInstall() {
+        if (installQueue.isEmpty()) return
+        val selectedUri = installQueue.removeFirst()
+
+        val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
+        if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
+            // .apks/.xapk/.apkm/.apkx：系统安装器不认这种 zip 容器，ACTION_VIEW 打不开，
+            // 只能走我们自己的 PackageInstaller Session（异步广播，不占"排队位"，直接继续下一个）
+            info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { it.toast() }
+            processNextInstall()
+        } else {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(selectedUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                installStepLauncher.launch(intent)
+                // 不在这里继续下一个，等 installStepLauncher 的回调（见 onInstallStepFinished）
+            } catch (e: Exception) {
+                // 没有任何 App 能处理 ACTION_VIEW（几乎不可能，兜底一下），走我们自己的 Session
+                info.muge.appshare.utils.SplitApkInstaller.installSingleApk(context, selectedUri) { it.toast() }
+                processNextInstall()
+            }
+        }
+    }
+    onInstallStepFinished[0] = { processNextInstall() }
+
     val apkInstallLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-
         uris.forEach { selectedUri ->
             try {
                 context.contentResolver.takePersistableUriPermission(
@@ -114,68 +156,8 @@ fun SettingsScreen(
                 )
             } catch (_: Exception) { }
         }
-
-        fun fallbackInstall() {
-            uris.forEach { selectedUri ->
-                val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
-                if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
-                    info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { it.toast() }
-                } else {
-                    info.muge.appshare.utils.SplitApkInstaller.installSingleApk(context, selectedUri) { it.toast() }
-                }
-            }
-        }
-
-        try {
-            if (uris.size == 1) {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uris[0], "application/vnd.android.package-archive")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-            } else {
-                val sendIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                    type = "application/vnd.android.package-archive"
-                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                // ACTION_SEND_MULTIPLE 本质是"分享"，网盘/AI助手/蓝牙分享等 App 只要声明能收文件
-                // 就会一起出现在候选里，体验很差，而且"是否持有安装未知应用权限"这条筛选还不够准——
-                // 有些 ROM 的蓝牙分享组件也持有这个权限。这里再加一层交叉验证：候选必须同时能处理
-                // 单个 apk 的 ACTION_VIEW（真正的安装器都支持这个，蓝牙分享/网盘类不会声明）。
-                val viewApkIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uris[0], "application/vnd.android.package-archive")
-                }
-                val viewCandidates = context.packageManager.queryIntentActivities(viewApkIntent, 0)
-                    .map { it.activityInfo.packageName }
-                    .toSet()
-
-                val candidates = context.packageManager.queryIntentActivities(sendIntent, 0)
-                    .map { it.activityInfo.packageName }
-                    .distinct()
-                    .filter { pkg ->
-                        pkg in viewCandidates &&
-                            context.packageManager.checkPermission(
-                                android.Manifest.permission.REQUEST_INSTALL_PACKAGES,
-                                pkg
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    }
-
-                when (candidates.size) {
-                    0 -> fallbackInstall()
-                    1 -> {
-                        sendIntent.setPackage(candidates[0])
-                        context.startActivity(sendIntent)
-                    }
-                    else -> context.startActivity(sendIntent)
-                }
-            }
-        } catch (_: Exception) {
-            // 没有任何 App 声明能处理这个意图（比如没装任何三方安装器、系统也拒绝了），走兜底方案
-            fallbackInstall()
-        }
+        installQueue.addAll(uris)
+        processNextInstall()
     }
 
     // 电池优化白名单状态：不在白名单里的话，系统在进程被杀后可能延迟甚至不投递
