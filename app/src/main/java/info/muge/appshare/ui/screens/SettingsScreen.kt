@@ -141,17 +141,26 @@ fun SettingsScreen(
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                // ACTION_SEND_MULTIPLE 本质是"分享"，网盘/AI助手等 App 只要声明能收文件就会一起出现在
-                // 分享列表里，体验很差。这里只挑出真正持有"安装未知应用"权限的 App 作为候选——
-                // 普通接收文件的 App 不会申请这个权限，能把网盘/聊天类 App 过滤掉。
+                // ACTION_SEND_MULTIPLE 本质是"分享"，网盘/AI助手/蓝牙分享等 App 只要声明能收文件
+                // 就会一起出现在候选里，体验很差，而且"是否持有安装未知应用权限"这条筛选还不够准——
+                // 有些 ROM 的蓝牙分享组件也持有这个权限。这里再加一层交叉验证：候选必须同时能处理
+                // 单个 apk 的 ACTION_VIEW（真正的安装器都支持这个，蓝牙分享/网盘类不会声明）。
+                val viewApkIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uris[0], "application/vnd.android.package-archive")
+                }
+                val viewCandidates = context.packageManager.queryIntentActivities(viewApkIntent, 0)
+                    .map { it.activityInfo.packageName }
+                    .toSet()
+
                 val candidates = context.packageManager.queryIntentActivities(sendIntent, 0)
                     .map { it.activityInfo.packageName }
                     .distinct()
                     .filter { pkg ->
-                        context.packageManager.checkPermission(
-                            android.Manifest.permission.REQUEST_INSTALL_PACKAGES,
-                            pkg
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        pkg in viewCandidates &&
+                            context.packageManager.checkPermission(
+                                android.Manifest.permission.REQUEST_INSTALL_PACKAGES,
+                                pkg
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                     }
 
                 when (candidates.size) {
