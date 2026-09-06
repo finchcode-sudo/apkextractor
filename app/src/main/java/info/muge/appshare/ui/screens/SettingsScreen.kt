@@ -96,11 +96,12 @@ fun SettingsScreen(
         uri?.let { onNavigateToAppDetailWithUri(it) }
     }
 
-    // 安装 APK：选择一个 apk/apks/apkx/apkm 文件，直接调起系统安装器
+    // 安装 APK：选择一个或多个 apk/apks/apkx/apkm 文件，逐个调起系统安装器
+    // GetContent 只能单选，改用 GetMultipleContents 才能真正支持多选
     val apkInstallLauncher = rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let { selectedUri ->
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        uris.forEach { selectedUri ->
             try {
                 context.contentResolver.takePersistableUriPermission(
                     selectedUri,
