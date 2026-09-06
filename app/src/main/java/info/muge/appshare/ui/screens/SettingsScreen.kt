@@ -96,20 +96,11 @@ fun SettingsScreen(
         uri?.let { onNavigateToAppDetailWithUri(it) }
     }
 
-    // 安装 APK：优先交给 InstallerX（如果装了的话）处理，走系统级"分享多个文件"的方式，
-    // 一次性把所有 uri 交出去，由它自己的批量安装界面处理，不用我们自己管权限、管排队。
-    // 没装 InstallerX 的话，退回到 PackageInstaller Session 方案兜底。
-    val installerXPackage = "com.rosan.installer"
-
-    fun isInstallerXAvailable(): Boolean {
-        return try {
-            context.packageManager.getPackageInfo(installerXPackage, 0)
-            true
-        } catch (_: Exception) {
-            false
-        }
-    }
-
+    // 安装 APK：用 ACTION_VIEW / ACTION_SEND_MULTIPLE 走系统正常的意图路由，不写死具体安装器包名，
+    // 这样如果用户把某个安装器（比如 InstallerX）设成了默认 apk 处理程序，系统会自动路由过去，
+    // 跟点文件管理器里的 apk 效果一致。多选批量时一次性把所有 uri 塞进 ACTION_SEND_MULTIPLE，
+    // 由对方 App 自己的批量安装界面接管，不用我们循环调 startActivity（会被系统拦截第二次）。
+    // 如果没有任何 App 能处理（ActivityNotFoundException），才退回我们自己的 PackageInstaller Session 兜底。
     val apkInstallLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
     ) { uris ->
@@ -124,30 +115,7 @@ fun SettingsScreen(
             } catch (_: Exception) { }
         }
 
-        if (isInstallerXAvailable()) {
-            try {
-                val intent = if (uris.size == 1) {
-                    Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uris[0], "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        setPackage(installerXPackage)
-                    }
-                } else {
-                    Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                        type = "application/vnd.android.package-archive"
-                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        setPackage(installerXPackage)
-                    }
-                }
-                context.startActivity(intent)
-            } catch (e: Exception) {
-                "调起 InstallerX 失败：${e.message}".toast()
-            }
-        } else {
-            // 兜底方案：没装 InstallerX，走我们自己的 PackageInstaller Session
+        fun fallbackInstall() {
             uris.forEach { selectedUri ->
                 val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
                 if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
@@ -156,6 +124,27 @@ fun SettingsScreen(
                     info.muge.appshare.utils.SplitApkInstaller.installSingleApk(context, selectedUri) { it.toast() }
                 }
             }
+        }
+
+        try {
+            val intent = if (uris.size == 1) {
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uris[0], "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } else {
+                Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "application/vnd.android.package-archive"
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            // 没有任何 App 声明能处理这个意图（比如没装任何三方安装器、系统也拒绝了），走兜底方案
+            fallbackInstall()
         }
     }
 
