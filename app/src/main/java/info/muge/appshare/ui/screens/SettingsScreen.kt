@@ -40,7 +40,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,9 +73,14 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settings = SPUtil.getGlobalSharedPreferences(context)
-    // 用于在连续安装多个 apk 之间插入延迟：系统对短时间内连续 startActivity() 拉起
-    // 安装器有节流限制，不加间隔的话只有第一个安装界面能弹出，后面的会被直接丢弃
-    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    // 多选安装多个 apk 时用来"排队"的队列：不能一次性把多个安装 Intent 都发出去，
+    // 因为发出第一个安装 Intent 后，我们自己的 App 马上被切到后台（系统安装器盖上来了），
+    // 这时候再调用第二次 startActivity() 属于"从后台拉起前台 Activity"，会被系统直接拦截，
+    // 不管中间等多久延迟都一样。正确做法是等用户处理完第一个（装完/取消/返回，App 重新回到前台）
+    // 触发 ActivityResult 回调后，再发下一个。
+    val installQueue = remember { ArrayDeque<Uri>() }
+    // processNextInstall 定义在 installStepLauncher 之后，这里先占位，最后再把真正的实现赋进来
+    val onInstallStepFinished = remember { arrayOfNulls<() -> Unit>(1) }
 
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showLoadingOptionsDialog by remember { mutableStateOf(false) }
@@ -100,48 +104,61 @@ fun SettingsScreen(
         uri?.let { onNavigateToAppDetailWithUri(it) }
     }
 
-    // 安装 APK：选择一个或多个 apk/apks/apkx/apkm 文件，逐个调起系统安装器
+    // 真正拉起系统安装器的 launcher：用 StartActivityForResult 而不是普通 startActivity，
+    // 这样用户从安装界面返回（不管装成功、取消，还是按了返回键）时，能收到回调，
+    // 我们就在这个回调里去处理队列里的下一个文件，确保每次拉起时 App 都在前台。
+    val installStepLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) {
+        onInstallStepFinished[0]?.invoke()
+    }
+
+    fun processNextInstall() {
+        if (installQueue.isEmpty()) return
+        val selectedUri = installQueue.removeFirst()
+
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                selectedUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) { }
+
+        val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
+
+        if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
+            // .apks/.xapk/.apkm/.apkx：里面是多个 split apk 打包在一起，走 PackageInstaller
+            // Session 提交，是异步广播流程，不会立刻把一个 Activity 带到前台占用"排队位"，
+            // 可以直接继续处理队列里的下一个，不用等它的回调
+            info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { errorMsg ->
+                errorMsg.toast()
+            }
+            processNextInstall()
+        } else {
+            // 普通单个 .apk：沿用系统安装器 ACTION_VIEW，最简单可靠
+            try {
+                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(selectedUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                installStepLauncher.launch(installIntent)
+                // 不在这里继续下一个：要等用户从安装界面返回，触发上面 installStepLauncher
+                // 的回调后才继续，见 onInstallStepFinished 的赋值
+            } catch (e: Exception) {
+                "无法打开系统安装器：${e.message}".toast()
+                processNextInstall()
+            }
+        }
+    }
+    onInstallStepFinished[0] = { processNextInstall() }
+
+    // 安装 APK：选择一个或多个 apk/apks/apkx/apkm 文件，加入队列后开始逐个安装
     // GetContent 只能单选，改用 GetMultipleContents 才能真正支持多选
     val apkInstallLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
     ) { uris ->
-        coroutineScope.launch {
-            uris.forEachIndexed { index, selectedUri ->
-                // 每个安装意图之间留出间隔，避免被系统的"连续 startActivity 节流"
-                // 吞掉——不加延迟的话，实测只有第一个能真正弹出安装界面
-                if (index > 0) {
-                    kotlinx.coroutines.delay(800)
-                }
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        selectedUri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: Exception) { }
-
-                val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
-
-                if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
-                    // .apks/.xapk/.apkm/.apkx：里面是多个 split apk 打包在一起，
-                    // 系统安装器不支持直接对着这种 zip 容器发 ACTION_VIEW 安装，需要走 PackageInstaller 多文件 Session
-                    info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { errorMsg ->
-                        errorMsg.toast()
-                    }
-                } else {
-                    // 普通单个 .apk：沿用系统安装器 ACTION_VIEW，最简单可靠
-                    try {
-                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(selectedUri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(installIntent)
-                    } catch (e: Exception) {
-                        "无法打开系统安装器：${e.message}".toast()
-                    }
-                }
-            }
-        }
+        installQueue.addAll(uris)
+        processNextInstall()
     }
 
     // 电池优化白名单状态：不在白名单里的话，系统在进程被杀后可能延迟甚至不投递
