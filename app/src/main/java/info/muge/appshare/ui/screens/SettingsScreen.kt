@@ -127,21 +127,42 @@ fun SettingsScreen(
         }
 
         try {
-            val intent = if (uris.size == 1) {
-                Intent(Intent.ACTION_VIEW).apply {
+            if (uris.size == 1) {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uris[0], "application/vnd.android.package-archive")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
+                context.startActivity(intent)
             } else {
-                Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                val sendIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                     type = "application/vnd.android.package-archive"
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
+                // ACTION_SEND_MULTIPLE 本质是"分享"，网盘/AI助手等 App 只要声明能收文件就会一起出现在
+                // 分享列表里，体验很差。这里只挑出真正持有"安装未知应用"权限的 App 作为候选——
+                // 普通接收文件的 App 不会申请这个权限，能把网盘/聊天类 App 过滤掉。
+                val candidates = context.packageManager.queryIntentActivities(sendIntent, 0)
+                    .map { it.activityInfo.packageName }
+                    .distinct()
+                    .filter { pkg ->
+                        context.packageManager.checkPermission(
+                            android.Manifest.permission.REQUEST_INSTALL_PACKAGES,
+                            pkg
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    }
+
+                when (candidates.size) {
+                    0 -> fallbackInstall()
+                    1 -> {
+                        sendIntent.setPackage(candidates[0])
+                        context.startActivity(sendIntent)
+                    }
+                    else -> context.startActivity(sendIntent)
+                }
             }
-            context.startActivity(intent)
         } catch (_: Exception) {
             // 没有任何 App 声明能处理这个意图（比如没装任何三方安装器、系统也拒绝了），走兜底方案
             fallbackInstall()
