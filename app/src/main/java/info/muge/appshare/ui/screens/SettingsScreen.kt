@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +74,9 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settings = SPUtil.getGlobalSharedPreferences(context)
+    // 用于在连续安装多个 apk 之间插入延迟：系统对短时间内连续 startActivity() 拉起
+    // 安装器有节流限制，不加间隔的话只有第一个安装界面能弹出，后面的会被直接丢弃
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showLoadingOptionsDialog by remember { mutableStateOf(false) }
@@ -101,33 +105,40 @@ fun SettingsScreen(
     val apkInstallLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
     ) { uris ->
-        uris.forEach { selectedUri ->
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    selectedUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) { }
-
-            val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
-
-            if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
-                // .apks/.xapk/.apkm/.apkx：里面是多个 split apk 打包在一起，
-                // 系统安装器不支持直接对着这种 zip 容器发 ACTION_VIEW 安装，需要走 PackageInstaller 多文件 Session
-                info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { errorMsg ->
-                    errorMsg.toast()
+        coroutineScope.launch {
+            uris.forEachIndexed { index, selectedUri ->
+                // 每个安装意图之间留出间隔，避免被系统的"连续 startActivity 节流"
+                // 吞掉——不加延迟的话，实测只有第一个能真正弹出安装界面
+                if (index > 0) {
+                    kotlinx.coroutines.delay(800)
                 }
-            } else {
-                // 普通单个 .apk：沿用系统安装器 ACTION_VIEW，最简单可靠
                 try {
-                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(selectedUri, "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.contentResolver.takePersistableUriPermission(
+                        selectedUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: Exception) { }
+
+                val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
+
+                if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
+                    // .apks/.xapk/.apkm/.apkx：里面是多个 split apk 打包在一起，
+                    // 系统安装器不支持直接对着这种 zip 容器发 ACTION_VIEW 安装，需要走 PackageInstaller 多文件 Session
+                    info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { errorMsg ->
+                        errorMsg.toast()
                     }
-                    context.startActivity(installIntent)
-                } catch (e: Exception) {
-                    "无法打开系统安装器：${e.message}".toast()
+                } else {
+                    // 普通单个 .apk：沿用系统安装器 ACTION_VIEW，最简单可靠
+                    try {
+                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(selectedUri, "application/vnd.android.package-archive")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(installIntent)
+                    } catch (e: Exception) {
+                        "无法打开系统安装器：${e.message}".toast()
+                    }
                 }
             }
         }
