@@ -96,11 +96,25 @@ fun SettingsScreen(
         uri?.let { onNavigateToAppDetailWithUri(it) }
     }
 
-    // 安装 APK：选择一个或多个 apk/apks/apkx/apkm 文件，统一走 PackageInstaller Session 提交，
-    // 循环提交多个 session 不受"App 切后台无法拉起前台 Activity"限制，不用再排队等上一个装完
+    // 安装 APK：优先交给 InstallerX（如果装了的话）处理，走系统级"分享多个文件"的方式，
+    // 一次性把所有 uri 交出去，由它自己的批量安装界面处理，不用我们自己管权限、管排队。
+    // 没装 InstallerX 的话，退回到 PackageInstaller Session 方案兜底。
+    val installerXPackage = "com.rosan.installer"
+
+    fun isInstallerXAvailable(): Boolean {
+        return try {
+            context.packageManager.getPackageInfo(installerXPackage, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     val apkInstallLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
     ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+
         uris.forEach { selectedUri ->
             try {
                 context.contentResolver.takePersistableUriPermission(
@@ -108,12 +122,39 @@ fun SettingsScreen(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: Exception) { }
+        }
 
-            val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
-            if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
-                info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { it.toast() }
-            } else {
-                info.muge.appshare.utils.SplitApkInstaller.installSingleApk(context, selectedUri) { it.toast() }
+        if (isInstallerXAvailable()) {
+            try {
+                val intent = if (uris.size == 1) {
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uris[0], "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        setPackage(installerXPackage)
+                    }
+                } else {
+                    Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                        type = "application/vnd.android.package-archive"
+                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        setPackage(installerXPackage)
+                    }
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                "调起 InstallerX 失败：${e.message}".toast()
+            }
+        } else {
+            // 兜底方案：没装 InstallerX，走我们自己的 PackageInstaller Session
+            uris.forEach { selectedUri ->
+                val fileName = info.muge.appshare.utils.SplitApkInstaller.queryDisplayName(context, selectedUri)
+                if (info.muge.appshare.utils.SplitApkInstaller.isSplitContainer(fileName)) {
+                    info.muge.appshare.utils.SplitApkInstaller.installSplitContainer(context, selectedUri) { it.toast() }
+                } else {
+                    info.muge.appshare.utils.SplitApkInstaller.installSingleApk(context, selectedUri) { it.toast() }
+                }
             }
         }
     }
