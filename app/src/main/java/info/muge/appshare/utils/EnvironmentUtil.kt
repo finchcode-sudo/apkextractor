@@ -636,24 +636,27 @@ object EnvironmentUtil {
         try {
             val bitmap = drawableToBitmap(drawable)
             val fileName = "Icon_${removeIllegalFileNameCharacters(appName)}_${System.currentTimeMillis()}.png"
-            
-            val values = android.content.ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
-                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/AppShare/Icons")
+
+            // 与 APK 导出保持一致，直接写入 Download/AppKit 目录
+            val exportDir = File(SPUtil.getInternalSavePath())
+            if (!exportDir.exists()) {
+                exportDir.mkdirs()
+            }
+            val outFile = File(exportDir, fileName)
+
+            java.io.FileOutputStream(outFile).use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
             }
 
-            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-            if (uri != null) {
-                val outputStream = context.contentResolver.openOutputStream(uri)
-                if (outputStream != null) {
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-                    outputStream.close()
-                    ToastManager.showToast(context, context.getString(R.string.toast_export_complete) + " " + fileName, Toast.LENGTH_SHORT)
-                }
-            } else {
-                ToastManager.showToast(context, "Failed to create file", Toast.LENGTH_SHORT)
-            }
+            // 让文件管理器/相册立即能看到这个新文件
+            android.media.MediaScannerConnection.scanFile(
+                context,
+                arrayOf(outFile.absolutePath),
+                arrayOf("image/png"),
+                null
+            )
+
+            ToastManager.showToast(context, context.getString(R.string.toast_export_complete) + " " + fileName, Toast.LENGTH_SHORT)
         } catch (e: Exception) {
             e.printStackTrace()
             ToastManager.showToast(context, "Error: ${e.message}", Toast.LENGTH_SHORT)
