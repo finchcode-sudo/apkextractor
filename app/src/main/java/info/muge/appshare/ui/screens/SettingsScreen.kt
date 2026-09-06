@@ -88,15 +88,17 @@ fun SettingsScreen(
     // 注：apks/apkx/apkm 的系统 MIME 类型并不是 application/vnd.android.package-archive，
     // 之前限定为该 MIME 会导致系统文件选择器直接把这些文件过滤掉、根本看不见，所以这里放开为 */*，
     // 具体文件类型校验交给后续逻辑（ImportItem 已按扩展名识别 zip/apks/xapk/apkm/apkx）。
+    // 选择器改用 GetContent（与 CodeSearch 项目一致），比 OpenDocument 兼容性更好，
+    // 部分第三方文件管理器对 OpenDocument 的 SAF 实现不完整，导致文件选不到或看不见。
     val apkAnalyzerLauncher = rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { onNavigateToAppDetailWithUri(it) }
     }
 
     // 安装 APK：选择一个 apk/apks/apkx/apkm 文件，直接调起系统安装器
     val apkInstallLauncher = rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { selectedUri ->
             try {
@@ -309,7 +311,7 @@ fun SettingsScreen(
             title = "安装 APK",
             value = "请选择一个或多个apk/apks/apkx/apkm文件进行安装",
             onClick = {
-                apkInstallLauncher.launch(arrayOf("*/*"))
+                apkInstallLauncher.launch("*/*")
             }
         )
 
@@ -321,7 +323,7 @@ fun SettingsScreen(
             title = "APK 分析器",
             value = "获取有关apk/apks/apkx/apkm文件的详细信息",
             onClick = {
-                apkAnalyzerLauncher.launch(arrayOf("*/*"))
+                apkAnalyzerLauncher.launch("*/*")
             }
         )
 
