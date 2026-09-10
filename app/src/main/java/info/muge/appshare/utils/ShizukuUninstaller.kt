@@ -6,17 +6,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
-import android.content.pm.IPackageInstaller
-import android.content.pm.IPackageManager
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.IBinder
+import android.os.IInterface
 import androidx.core.content.ContextCompat
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
-import java.lang.reflect.InvocationTargetException
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -26,10 +25,14 @@ import kotlin.coroutines.suspendCoroutine
  * 用户需要提前安装并激活 Shizuku（ADB 配对或 Root 均可），
  * 且需要在本 App 内授予 Shizuku 权限，否则无法使用静默卸载，
  * 此时应回退到系统自带的卸载确认弹窗（[Intent.ACTION_DELETE]）。
+ *
+ * 注意：`android.content.pm.IPackageInstaller` / `IPackageManager` 属于系统隐藏类，
+ * 不在标准 Android SDK 的编译用 android.jar 中，因此这里全程使用 [Class.forName]
+ * + 反射来访问它们，避免编译期直接引用导致 "Unresolved reference"。
  */
 object ShizukuUninstaller {
 
-    private const val SHIZUKU_REQUEST_CODE = 0x5A11 // "SALL" 谐音，随意取的常量
+    private const val SHIZUKU_REQUEST_CODE = 0x5A11 // 随意取的常量，用来匹配权限回调
 
     /** Shizuku 服务是否已安装、正在运行并可用（不代表已授权）。 */
     fun isShizukuAvailable(): Boolean {
@@ -88,9 +91,10 @@ object ShizukuUninstaller {
     suspend fun silentUninstall(context: Context, packageName: String): Boolean {
         if (!hasPermission()) return false
 
+        val appContext = context.applicationContext
+
         return try {
-            val appContext = context.applicationContext
-            val packageInstaller = getPackageInstaller(appContext)
+            val packageInstaller = buildPrivilegedPackageInstaller(appContext) ?: return false
 
             val isSystemApp = try {
                 val flags = appContext.packageManager
@@ -149,59 +153,80 @@ object ShizukuUninstaller {
         }
     }
 
-    private val packageManagerService: IPackageManager by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm")
-        }
-        IPackageManager.Stub.asInterface(
-            ShizukuBinderWrapper(SystemServiceHelper.getSystemService("package"))
-        )
-    }
+    /**
+     * 通过 Shizuku 反射构造一个具有隐藏权限的 [PackageInstaller] 实例。
+     * 全程使用 [Class.forName]，不在编译期直接引用 IPackageManager / IPackageInstaller。
+     */
+    private fun buildPrivilegedPackageInstaller(context: Context): PackageInstaller? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm")
+            }
 
-    private fun getPrivilegedPackageInstaller(): IPackageInstaller {
-        val installer: IPackageInstaller = packageManagerService.packageInstaller
-        return IPackageInstaller.Stub.asInterface(ShizukuBinderWrapper(installer.asBinder()))
-    }
+            // 1. 通过 Shizuku 拿到系统 "package" 服务对应的 IPackageManager 代理对象
+            val iPackageManagerClass = Class.forName("android.content.pm.IPackageManager")
+            val iPackageManagerStubClass = Class.forName("android.content.pm.IPackageManager\$Stub")
+            val pmAsInterface = iPackageManagerStubClass.getMethod("asInterface", IBinder::class.java)
+            val rawPmBinder = ShizukuBinderWrapper(SystemServiceHelper.getSystemService("package"))
+            val packageManagerProxy = pmAsInterface.invoke(null, rawPmBinder)
+                ?: return null
 
-    @Throws(
-        NoSuchMethodException::class,
-        IllegalAccessException::class,
-        InvocationTargetException::class,
-        InstantiationException::class,
-    )
-    private fun getPackageInstaller(context: Context): PackageInstaller {
-        val iPackageInstaller = getPrivilegedPackageInstaller()
-        val root = Shizuku.getUid() == 0
-        val userId = if (root) android.os.Process.myUserHandle().hashCode() else 0
-        // 使用 "com.android.shell" 作为安装者包名：
-        // getMySessions 会校验安装者包名的所有者，adb shell 场景下需要与其保持一致。
-        val installerPackageName = "com.android.shell"
+            // 2. 调用 IPackageManager#getPackageInstaller() 拿到底层 IPackageInstaller 对象
+            val getPackageInstallerMethod = iPackageManagerClass.getMethod("getPackageInstaller")
+            val rawPackageInstaller = getPackageInstallerMethod.invoke(packageManagerProxy)
+                ?: return null
 
-        return if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
-            PackageInstaller::class.java.getConstructor(
-                IPackageInstaller::class.java,
-                String::class.java,
-                String::class.java,
-                Int::class.javaPrimitiveType
-            ).newInstance(iPackageInstaller, installerPackageName, null, userId)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            PackageInstaller::class.java.getConstructor(
-                IPackageInstaller::class.java, String::class.java, Int::class.java
-            ).newInstance(iPackageInstaller, installerPackageName, userId)
-        } else {
-            PackageInstaller::class.java.getConstructor(
-                Context::class.java,
-                PackageManager::class.java,
-                IPackageInstaller::class.java,
-                String::class.java,
-                Int::class.javaPrimitiveType
-            ).newInstance(
-                context,
-                context.packageManager,
-                iPackageInstaller,
-                installerPackageName,
-                userId
-            )
+            // 3. 取出它的 Binder，再用 ShizukuBinderWrapper 包一层，换成走 Shizuku 通道的代理对象
+            val asBinderMethod = IInterface::class.java.getMethod("asBinder")
+            val rawInstallerBinder = asBinderMethod.invoke(rawPackageInstaller) as IBinder
+            val wrappedInstallerBinder = ShizukuBinderWrapper(rawInstallerBinder)
+
+            val iPackageInstallerClass = Class.forName("android.content.pm.IPackageInstaller")
+            val iPackageInstallerStubClass = Class.forName("android.content.pm.IPackageInstaller\$Stub")
+            val piAsInterface = iPackageInstallerStubClass.getMethod("asInterface", IBinder::class.java)
+            val privilegedIPackageInstaller = piAsInterface.invoke(null, wrappedInstallerBinder)
+                ?: return null
+
+            // 4. 用反射拿到的 IPackageInstaller 代理对象，构造公开的 android.content.pm.PackageInstaller
+            val root = Shizuku.getUid() == 0
+            val userId = if (root) android.os.Process.myUserHandle().hashCode() else 0
+            // 使用 "com.android.shell" 作为安装者包名：
+            // getMySessions 会校验安装者包名的所有者，adb shell 场景下需要与其保持一致。
+            val installerPackageName = "com.android.shell"
+
+            val instance: Any = when {
+                Build.VERSION.SDK_INT > Build.VERSION_CODES.R -> {
+                    PackageInstaller::class.java.getConstructor(
+                        iPackageInstallerClass,
+                        String::class.java,
+                        String::class.java,
+                        Int::class.javaPrimitiveType
+                    ).newInstance(privilegedIPackageInstaller, installerPackageName, null, userId)
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    PackageInstaller::class.java.getConstructor(
+                        iPackageInstallerClass, String::class.java, Int::class.javaPrimitiveType
+                    ).newInstance(privilegedIPackageInstaller, installerPackageName, userId)
+                }
+                else -> {
+                    PackageInstaller::class.java.getConstructor(
+                        Context::class.java,
+                        PackageManager::class.java,
+                        iPackageInstallerClass,
+                        String::class.java,
+                        Int::class.javaPrimitiveType
+                    ).newInstance(
+                        context,
+                        context.packageManager,
+                        privilegedIPackageInstaller,
+                        installerPackageName,
+                        userId
+                    )
+                }
+            }
+            instance as PackageInstaller
+        } catch (_: Throwable) {
+            null
         }
     }
 }
