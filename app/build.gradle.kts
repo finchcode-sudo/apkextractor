@@ -148,6 +148,11 @@ dependencies {
 
     // MaterialKolor - 动态主题色
     implementation("com.materialkolor:material-kolor:4.1.1")
+
+    // Shizuku - 用于免弹窗静默卸载
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
 }
 
 // 注册自动导出逻辑
