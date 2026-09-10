@@ -96,7 +96,7 @@ import info.muge.appshare.utils.AppIconModel
 import info.muge.appshare.utils.findActivity
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.resume
+import kotlin.coroutines.resume
 import info.muge.appshare.utils.ShizukuUninstaller
 import kotlin.math.roundToInt
 
