@@ -45,6 +45,14 @@
     <uses-permission
         android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!--
+        Shizuku 静默卸载所需：允许查询 Shizuku 是否已安装
+    -->
+    <queries>
+        <package android:name="rikka.shizuku" />
+        <package android:name="moe.shizuku.privileged.api" />
+    </queries>
+
     <application
         android:name=".MyApplication"
         android:allowBackup="true"
@@ -154,6 +162,17 @@
         <meta-data
             android:name="android.max_aspect"
             android:value="2.4" />
+
+        <!-- ========================================== -->
+        <!-- Shizuku Provider（用于免弹窗静默卸载） -->
+        <!-- ========================================== -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
     </application>
 
