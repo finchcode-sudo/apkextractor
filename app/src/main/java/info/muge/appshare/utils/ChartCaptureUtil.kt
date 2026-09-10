@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 
@@ -47,11 +46,10 @@ object ChartCaptureUtil {
     fun createShareIntent(context: Context, filePath: String, title: String = "Share Chart"): Intent? {
         return try {
             val file = File(filePath)
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
+            // 复用 EnvironmentUtil 中统一维护的 FileProvider authority，
+            // 避免各处硬编码导致与 AndroidManifest 里声明的
+            // "info.muge.appshare.FileProvider" 不一致而在运行时崩溃。
+            val uri = EnvironmentUtil.getUriForFileByFileProvider(context, file)
 
             Intent(Intent.ACTION_SEND).apply {
                 type = "image/png"
