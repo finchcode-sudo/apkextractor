@@ -95,6 +95,9 @@ import info.muge.appshare.utils.EnvironmentUtil
 import info.muge.appshare.utils.AppIconModel
 import info.muge.appshare.utils.findActivity
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.resume
+import info.muge.appshare.utils.ShizukuUninstaller
 import kotlin.math.roundToInt
 
 /**
@@ -364,18 +367,42 @@ fun AppDetailScreen(
                                                     context.getString(R.string.toast_export_complete),
                                                     Toast.LENGTH_SHORT
                                                 )
-                                                // 备份成功后直接卸载该应用（外部导入的 APK 本机未安装，无需卸载）
+                                                // 备份成功后卸载该应用（外部导入的 APK 本机未安装，无需卸载）
+                                                // 优先走 Shizuku 静默卸载（不弹系统确认框）；
+                                                // 没有 Shizuku 权限时才回退到系统卸载确认框。
                                                 if (item.getInstallSource() != "External File") {
-                                                    try {
-                                                        uninstallLauncher.launch(
-                                                            Intent(Intent.ACTION_DELETE, Uri.parse("package:${item.getPackageName()}"))
-                                                        )
-                                                    } catch (_: Exception) {
-                                                        ToastManager.showToast(
-                                                            context,
-                                                            context.getString(R.string.toast_uninstall_not_allowed),
-                                                            Toast.LENGTH_SHORT
-                                                        )
+                                                    val packageName = item.getPackageName()
+                                                    scope.launch {
+                                                        val silentlyUninstalled = if (ShizukuUninstaller.hasPermission()) {
+                                                            ShizukuUninstaller.silentUninstall(context, packageName)
+                                                        } else if (ShizukuUninstaller.isShizukuAvailable()) {
+                                                            val granted = suspendCancellableCoroutine<Boolean> { cont ->
+                                                                ShizukuUninstaller.requestPermission { result ->
+                                                                    if (cont.isActive) cont.resume(result)
+                                                                }
+                                                            }
+                                                            if (granted) {
+                                                                ShizukuUninstaller.silentUninstall(context, packageName)
+                                                            } else {
+                                                                false
+                                                            }
+                                                        } else {
+                                                            false
+                                                        }
+
+                                                        if (!silentlyUninstalled) {
+                                                            try {
+                                                                uninstallLauncher.launch(
+                                                                    Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
+                                                                )
+                                                            } catch (_: Exception) {
+                                                                ToastManager.showToast(
+                                                                    context,
+                                                                    context.getString(R.string.toast_uninstall_not_allowed),
+                                                                    Toast.LENGTH_SHORT
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
