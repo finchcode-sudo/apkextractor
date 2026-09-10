@@ -122,6 +122,12 @@
     <string name="toast_export_complete">应用已导出至/sdcard/Download/AppKit</string>
     <string name="toast_import_complete">导入完成,如有APK包可尝试手动安装</string>
 
+    <string name="dialog_export_uninstall_title">备份完成</string>
+    <string name="dialog_export_uninstall_message">「%1$s」已备份，是否立即卸载该应用？</string>
+    <string name="dialog_export_uninstall_confirm">卸载</string>
+    <string name="dialog_export_uninstall_cancel">暂不卸载</string>
+    <string name="toast_uninstall_not_allowed">该应用无法卸载（可能是系统应用）</string>
+
     <string name="dialog_import_finished_error_title">提示</string>
     <string name="dialog_import_finished_error_message">下列文件导入错误，错误信息如下：\n\n</string>
 
