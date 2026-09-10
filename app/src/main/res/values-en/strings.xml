@@ -112,6 +112,12 @@
     <string name="toast_export_complete">The app(s) are exported to </string>
     <string name="toast_import_complete">Importing completed, if there is any apk packages, try to install them manually</string>
 
+    <string name="dialog_export_uninstall_title">Backup complete</string>
+    <string name="dialog_export_uninstall_message">"%1$s" has been backed up. Uninstall it now?</string>
+    <string name="dialog_export_uninstall_confirm">Uninstall</string>
+    <string name="dialog_export_uninstall_cancel">Not now</string>
+    <string name="toast_uninstall_not_allowed">This app cannot be uninstalled (it may be a system app)</string>
+
     <string name="dialog_import_finished_error_title">Attention</string>
     <string name="dialog_import_finished_error_message">The following file(s) occur errors while importing, the infos are listed bellow\n\n</string>
 
