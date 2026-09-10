@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,9 +36,11 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -116,6 +120,12 @@ fun AppDetailScreen(
 
     // 显示选项对话框
     var showIconOptions by remember { mutableStateOf(false) }
+
+    // 导出完成后询问是否卸载该应用（备份并卸载）
+    var pendingUninstall by remember { mutableStateOf<AppItem?>(null) }
+    val uninstallLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { /* 卸载结果由系统广播/PackageChangeReceiver 处理列表刷新，这里无需额外操作 */ }
 
     // 折叠头部状态
     var headerHeightPx by remember { mutableFloatStateOf(0f) }
@@ -357,6 +367,10 @@ fun AppDetailScreen(
                                                     context.getString(R.string.toast_export_complete),
                                                     Toast.LENGTH_SHORT
                                                 )
+                                                // 备份成功后询问是否顺手卸载该应用（外部导入的 APK 本机未安装，无需询问）
+                                                if (item.getInstallSource() != "External File") {
+                                                    pendingUninstall = item
+                                                }
                                             }
                                         }
                                     }
@@ -416,6 +430,45 @@ fun AppDetailScreen(
                 }
             }
         }
+    }
+
+    // 导出成功后，询问是否卸载该应用
+    pendingUninstall?.let { targetItem ->
+        AlertDialog(
+            onDismissRequest = { pendingUninstall = null },
+            title = { Text(stringResource(R.string.dialog_export_uninstall_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.dialog_export_uninstall_message,
+                        targetItem.getAppName()
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingUninstall = null
+                    try {
+                        uninstallLauncher.launch(
+                            Intent(Intent.ACTION_DELETE, Uri.parse("package:${targetItem.getPackageName()}"))
+                        )
+                    } catch (_: Exception) {
+                        ToastManager.showToast(
+                            context,
+                            context.getString(R.string.toast_uninstall_not_allowed),
+                            Toast.LENGTH_SHORT
+                        )
+                    }
+                }) {
+                    Text(stringResource(R.string.dialog_export_uninstall_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUninstall = null }) {
+                    Text(stringResource(R.string.dialog_export_uninstall_cancel))
+                }
+            }
+        )
     }
 
     // 图标选项对话框
