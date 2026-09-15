@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -45,6 +46,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryScrollableTabRow
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -94,6 +97,7 @@ import info.muge.appshare.ui.theme.AppDimens
 import info.muge.appshare.utils.EnvironmentUtil
 import info.muge.appshare.utils.AppIconModel
 import info.muge.appshare.utils.findActivity
+import info.muge.appshare.utils.SPUtil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -121,6 +125,12 @@ fun AppDetailScreen(
 
     // 显示选项对话框
     var showIconOptions by remember { mutableStateOf(false) }
+
+    // 全局开关：导出完成后是否自动走 Shizuku 静默卸载该应用（备份并卸载）。
+    // 存到全局 SharedPreferences，切一次全应用范围内都生效，不用每次导出前单独确认。
+    var autoUninstallAfterExport by remember {
+        mutableStateOf(SPUtil.getAutoUninstallAfterExport(context))
+    }
 
     // 导出完成后自动卸载该应用（备份并卸载）
     val uninstallLauncher = rememberLauncherForActivityResult(
@@ -265,6 +275,42 @@ fun AppDetailScreen(
                         )
                     }
                 },
+                actions = {
+                    // 全局开关：导出后是否顺手用 Shizuku 静默卸载该应用。
+                    // 关掉之后，「导出」按钮就只做导出，不会再触发卸载流程；
+                    // 这是全局设置，切一次对所有 App 的导出都生效。
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bolt,
+                            contentDescription = null,
+                            tint = if (autoUninstallAfterExport)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Switch(
+                            checked = autoUninstallAfterExport,
+                            onCheckedChange = { checked ->
+                                autoUninstallAfterExport = checked
+                                SPUtil.setAutoUninstallAfterExport(context, checked)
+                                ToastManager.showToast(
+                                    context,
+                                    if (checked)
+                                        "已开启：导出后将通过 Shizuku 自动卸载（全局生效）"
+                                    else
+                                        "已关闭：导出后不再自动卸载（全局生效）",
+                                    Toast.LENGTH_SHORT
+                                )
+                            },
+                            colors = SwitchDefaults.colors()
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
@@ -367,13 +413,17 @@ fun AppDetailScreen(
                                                     context.getString(R.string.toast_export_complete),
                                                     Toast.LENGTH_SHORT
                                                 )
-                                                // 备份成功后卸载该应用（外部导入的 APK 本机未安装，无需卸载）
-                                                // 优先走 Shizuku 静默卸载（不弹系统确认框）；
-                                                // 没有 Shizuku 权限时才回退到系统卸载确认框。
-                                                if (item.getInstallSource() != "External File") {
+                                                // 备份成功后是否卸载该应用，受右上角全局 Shizuku 开关控制：
+                                                // 关闭时（默认）导出到此结束，不会再弹任何卸载确认/静默卸载。
+                                                // 开启时才会尝试卸载（外部导入的 APK 本机未安装，无需卸载）。
+                                                if (autoUninstallAfterExport && item.getInstallSource() != "External File") {
                                                     val packageName = item.getPackageName()
                                                     scope.launch {
-                                                        val silentlyUninstalled = if (ShizukuUninstaller.hasPermission()) {
+                                                        // 全局"使用 Shizuku 静默卸载"开关也关着的话，直接走系统确认框。
+                                                        val wantShizuku = SPUtil.getUseShizukuUninstall(context)
+                                                        val silentlyUninstalled = if (!wantShizuku) {
+                                                            false
+                                                        } else if (ShizukuUninstaller.hasPermission()) {
                                                             ShizukuUninstaller.silentUninstall(context, packageName)
                                                         } else if (ShizukuUninstaller.isShizukuAvailable()) {
                                                             val granted = suspendCancellableCoroutine<Boolean> { cont ->
