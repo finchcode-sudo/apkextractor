@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -130,6 +131,22 @@ fun AppDetailScreen(
     // 存到全局 SharedPreferences，切一次全应用范围内都生效，不用每次导出前单独确认。
     var autoUninstallAfterExport by remember {
         mutableStateOf(SPUtil.getAutoUninstallAfterExport(context))
+    }
+
+    // Shizuku 服务是否已激活（未激活时开关强制关闭、置灰、不可点）。
+    // 首次进入检测一次，之后每次页面重新回到前台（比如从 Shizuku App 切回来）都重新检测一次。
+    var shizukuAvailable by remember {
+        mutableStateOf(ShizukuUninstaller.isShizukuAvailable())
+    }
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                shizukuAvailable = ShizukuUninstaller.isShizukuAvailable()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // 导出完成后自动卸载该应用（备份并卸载）
@@ -279,22 +296,35 @@ fun AppDetailScreen(
                     // 全局开关：导出后是否顺手用 Shizuku 静默卸载该应用。
                     // 关掉之后，「导出」按钮就只做导出，不会再触发卸载流程；
                     // 这是全局设置，切一次对所有 App 的导出都生效。
+                    // Shizuku 服务没激活时，开关强制显示为关闭、置灰、点不动。
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clickable(
+                                enabled = !shizukuAvailable,
+                                onClick = {
+                                    ToastManager.showToast(
+                                        context,
+                                        "Shizuku 未激活，请先在 Shizuku App 里启动服务",
+                                        Toast.LENGTH_SHORT
+                                    )
+                                }
+                            )
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Bolt,
                             contentDescription = null,
-                            tint = if (autoUninstallAfterExport)
+                            tint = if (shizukuAvailable && autoUninstallAfterExport)
                                 MaterialTheme.colorScheme.primary
                             else
-                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (shizukuAvailable) 1f else 0.38f),
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Switch(
-                            checked = autoUninstallAfterExport,
+                            checked = shizukuAvailable && autoUninstallAfterExport,
+                            enabled = shizukuAvailable,
                             onCheckedChange = { checked ->
                                 autoUninstallAfterExport = checked
                                 SPUtil.setAutoUninstallAfterExport(context, checked)
@@ -416,7 +446,7 @@ fun AppDetailScreen(
                                                 // 备份成功后是否卸载该应用，受右上角全局 Shizuku 开关控制：
                                                 // 关闭时（默认）导出到此结束，不会再弹任何卸载确认/静默卸载。
                                                 // 开启时才会尝试卸载（外部导入的 APK 本机未安装，无需卸载）。
-                                                if (autoUninstallAfterExport && item.getInstallSource() != "External File") {
+                                                if (autoUninstallAfterExport && shizukuAvailable && item.getInstallSource() != "External File") {
                                                     val packageName = item.getPackageName()
                                                     scope.launch {
                                                         // 全局"使用 Shizuku 静默卸载"开关也关着的话，直接走系统确认框。
