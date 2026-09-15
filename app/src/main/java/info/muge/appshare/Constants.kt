@@ -26,6 +26,23 @@ object Constants {
     const val PREFERENCE_STORAGE_PATH_EXTERNAL_DEFAULT = false
 
     /**
+     * this preference stands for a boolean value;
+     * 全局开关：导出完成后是否自动卸载该应用（备份并卸载）。
+     * 关闭后，导出仅做导出，不会再触发任何卸载流程（含 Shizuku 静默卸载和系统卸载确认框）。
+     */
+    const val PREFERENCE_AUTO_UNINSTALL_AFTER_EXPORT = "auto_uninstall_after_export"
+    const val PREFERENCE_AUTO_UNINSTALL_AFTER_EXPORT_DEFAULT = false
+
+    /**
+     * this preference stands for a boolean value;
+     * 全局开关：是否优先使用 Shizuku 进行静默卸载（免系统确认弹窗）。
+     * 仅在 [PREFERENCE_AUTO_UNINSTALL_AFTER_EXPORT] 开启时才有意义；
+     * 关闭时即使装了 Shizuku 也会走系统自带的卸载确认框。
+     */
+    const val PREFERENCE_USE_SHIZUKU_UNINSTALL = "use_shizuku_uninstall"
+    const val PREFERENCE_USE_SHIZUKU_UNINSTALL_DEFAULT = true
+
+    /**
      * this preference stands for a string value;
      */
     const val PREFERENCE_FILENAME_FONT_APK = "font_apk"
