@@ -78,4 +78,38 @@ object SPUtil {
             Constants.PREFERENCE_DEVICE_NAME_DEFAULT
         }
     }
+
+    /**
+     * 全局开关：导出完成后是否自动卸载该应用（备份并卸载）。
+     * 默认关闭——单纯导出，不再顺手把应用卸载掉。
+     */
+    fun getAutoUninstallAfterExport(context: Context): Boolean {
+        return getGlobalSharedPreferences(context).getBoolean(
+            Constants.PREFERENCE_AUTO_UNINSTALL_AFTER_EXPORT,
+            Constants.PREFERENCE_AUTO_UNINSTALL_AFTER_EXPORT_DEFAULT
+        )
+    }
+
+    fun setAutoUninstallAfterExport(context: Context, enabled: Boolean) {
+        getGlobalSharedPreferences(context).edit()
+            .putBoolean(Constants.PREFERENCE_AUTO_UNINSTALL_AFTER_EXPORT, enabled)
+            .apply()
+    }
+
+    /**
+     * 全局开关：卸载时是否优先走 Shizuku 静默卸载（不弹系统确认框）。
+     * 关闭时走系统自带的卸载确认框（[Intent.ACTION_DELETE]）。
+     */
+    fun getUseShizukuUninstall(context: Context): Boolean {
+        return getGlobalSharedPreferences(context).getBoolean(
+            Constants.PREFERENCE_USE_SHIZUKU_UNINSTALL,
+            Constants.PREFERENCE_USE_SHIZUKU_UNINSTALL_DEFAULT
+        )
+    }
+
+    fun setUseShizukuUninstall(context: Context, enabled: Boolean) {
+        getGlobalSharedPreferences(context).edit()
+            .putBoolean(Constants.PREFERENCE_USE_SHIZUKU_UNINSTALL, enabled)
+            .apply()
+    }
 }
